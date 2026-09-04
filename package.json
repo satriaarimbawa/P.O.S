@@ -1,0 +1,27 @@
+{
+  "name": "kopipos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KopiPOS - Platform POS SaaS untuk Kafe & Restoran",
+  "scripts": {
+    "dev:pos": "turbo run dev --filter=@kopipos/pos",
+    "dev:api": "turbo run dev --filter=@kopipos/api",
+    "dev:admin": "turbo run dev --filter=@kopipos/admin",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean",
+    "db:migrate": "turbo run db:migrate",
+    "db:seed": "turbo run db:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0",
+    "prettier": "^3.4.0",
+    "@types/node": "^22.10.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

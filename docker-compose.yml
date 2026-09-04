@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Central Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: kopipos_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-kopipos}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kopipos-net
+
+  # 2. Cloud Backend API (Fastify + Drizzle)
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: kopipos_api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-kopipos}
+      JWT_SECRET: ${JWT_SECRET:-kopipos_super_secret_jwt_key_2026}
+    ports:
+      - '3001:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - kopipos-net
+
+  # 3. Vendor Admin Hub (Next.js Dashboard)
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    container_name: kopipos_admin
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    ports:
+      - '3000:3000'
+    depends_on:
+      - api
+    networks:
+      - kopipos-net
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  kopipos-net:
+    driver: bridge
