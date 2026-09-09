@@ -143,9 +143,10 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
     if (!req) return;
     setSelectedDOId(requestId);
     setShowDirectStockIn(false);
+    // Hilangkan auto-fill: inisialisasi dengan string kosong agar staf mengisi hitungan riil
     const initialCounts: { [materialId: string]: string } = {};
     req.items.forEach(item => {
-      initialCounts[item.materialId] = String(item.qtyRequested);
+      initialCounts[item.materialId] = '';
     });
     setDoReceivedCounts(initialCounts);
   };
@@ -626,51 +627,70 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                         </div>
                       </div>
 
-                      {/* Daftar Barang Dalam DO & Input Qty Fisik */}
+                      {/* Tabel Verifikasi DO: Kolom Qty Harusnya Datang vs Input Qty Fisik Datang (Tanpa Auto-Fill) */}
                       <div className="space-y-2">
                         <label className="block font-bold text-slate-700 text-xs">
                           Daftar Barang & Input Hitungan Fisik Aktual:
                         </label>
 
-                        <div className="space-y-2.5">
-                          {currentRequest.items.map((item) => {
-                            const currentVal = doReceivedCounts[item.materialId] !== undefined
-                              ? doReceivedCounts[item.materialId]
-                              : String(item.qtyRequested);
+                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-100/90 text-slate-600 font-black border-b border-slate-200 text-[11px]">
+                              <tr>
+                                <th className="p-3">Nama Bahan Baku</th>
+                                <th className="p-3 text-center w-36 sm:w-44 bg-slate-50">Qty Harusnya Datang (DO)</th>
+                                <th className="p-3 text-center w-40 sm:w-48 bg-emerald-50/50 text-emerald-950 font-black">
+                                  Input Qty Fisik Datang
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-medium">
+                              {currentRequest.items.map((item) => {
+                                const currentVal = doReceivedCounts[item.materialId] !== undefined
+                                  ? doReceivedCounts[item.materialId]
+                                  : '';
 
-                            return (
-                              <div
-                                key={item.materialId}
-                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:border-emerald-300 transition-colors"
-                              >
-                                <div className="flex-1">
-                                  <div className="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
-                                    <Package size={16} className="text-emerald-600" />
-                                    <span>{item.materialName}</span>
-                                  </div>
-                                  <span className="text-[11px] text-slate-400 font-medium">
-                                    Pesanan Sistem: <strong className="text-slate-700 font-mono">{item.qtyRequested} {item.unit}</strong>
-                                  </span>
-                                </div>
+                                return (
+                                  <tr key={item.materialId} className="hover:bg-slate-50/80 transition-colors">
+                                    <td className="p-3">
+                                      <div className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
+                                        <Package size={15} className="text-emerald-600 shrink-0" />
+                                        <span>{item.materialName}</span>
+                                      </div>
+                                      <span className="text-[10px] text-slate-400">Satuan: {item.unit}</span>
+                                    </td>
 
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[11px] font-bold text-slate-600">Qty Fisik Datang:</span>
-                                  <div className="w-36 flex items-center gap-1.5">
-                                    <input
-                                      type="number"
-                                      min="0.1"
-                                      step="0.1"
-                                      value={currentVal}
-                                      onChange={(e) => handleDOItemCountChange(item.materialId, e.target.value)}
-                                      className="w-full text-xs font-mono font-black p-2 bg-slate-50 border-2 border-emerald-400 focus:border-emerald-600 rounded-xl text-slate-900 text-center focus:bg-white outline-none"
-                                      placeholder="Qty"
-                                    />
-                                    <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">{item.unit}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
+                                    <td className="p-3 text-center bg-slate-50/50">
+                                      <span className="inline-block font-mono font-black text-xs sm:text-sm bg-white text-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 shadow-xs">
+                                        {item.qtyRequested} {item.unit}
+                                      </span>
+                                    </td>
+
+                                    <td className="p-3 text-center bg-emerald-50/20">
+                                      <div className="inline-flex items-center justify-center gap-1.5">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.05"
+                                          autoComplete="off"
+                                          value={currentVal}
+                                          onChange={(e) => handleDOItemCountChange(item.materialId, e.target.value)}
+                                          onFocus={(e) => {
+                                            if (e.target.value === '0') {
+                                              handleDOItemCountChange(item.materialId, '');
+                                            }
+                                          }}
+                                          className="w-24 sm:w-28 text-center p-2 bg-white border-2 border-slate-200 focus:border-emerald-500 rounded-xl font-mono font-black text-slate-900 focus:bg-white outline-none text-xs sm:text-sm"
+                                          placeholder="0"
+                                        />
+                                        <span className="text-xs font-bold text-slate-600 w-8 text-left">{item.unit}</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
 
