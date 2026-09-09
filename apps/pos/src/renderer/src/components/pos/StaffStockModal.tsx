@@ -81,12 +81,11 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
   const [opnameNotes, setOpnameNotes] = useState('');
   const [opnameCounts, setOpnameCounts] = useState<{ [materialId: string]: string }>({});
 
-  // Initialize opname counts with current actual/expected stock
+  // Initialize opname counts (Blind Stock Count: empty by default so staff count physically)
   useEffect(() => {
     const initial: { [materialId: string]: string } = {};
     materials.forEach(m => {
-      const currentEst = Number((m.startStock + m.stockIn - m.usedSystem).toFixed(2));
-      initial[m.id] = String(m.actualPhysicalStock !== undefined ? m.actualPhysicalStock : currentEst);
+      initial[m.id] = m.actualPhysicalStock !== undefined ? String(m.actualPhysicalStock) : '';
     });
     setOpnameCounts(initial);
   }, [materials, isOpen]);
@@ -714,20 +713,20 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
           {activeTab === 'stock-take' && (
             <div className="space-y-6">
               
-              {/* Form Input Stock Opname Harian */}
+              {/* Form Input Stock Opname Harian (Blind Count) */}
               <form onSubmit={handleSubmitStockOpname} className="space-y-4 text-xs bg-sky-50/40 p-4 sm:p-5 rounded-3xl border border-sky-100">
                 <div className="flex items-start justify-between gap-2 border-b border-sky-100 pb-3">
                   <div>
                     <h3 className="font-black text-sm text-sky-950 flex items-center gap-1.5">
                       <Scale size={16} className="text-sky-600" />
-                      <span>Formulir Penghitungan Fisik (Stock Opname Harian)</span>
+                      <span>Formulir Hitung Fisik (Stock Opname Harian - Blind Count)</span>
                     </h3>
                     <p className="text-[11px] text-sky-800/80 mt-0.5">
-                      Hitung sisa fisik bahan baku di bar/dapur saat pergantian shift atau closing harian untuk memantau selisih & wastage.
+                      Hitung dan masukkan sisa fisik riil bahan baku di bar. Sistem POS akan menghitung rekonsiliasi & selisih di sisi Owner.
                     </p>
                   </div>
                   <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-lg border border-sky-200 shrink-0">
-                    Audit Harian
+                    Blind Count
                   </span>
                 </div>
 
@@ -756,65 +755,42 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                   </div>
                 </div>
 
-                {/* Tabel Input Hitungan Fisik */}
+                {/* Tabel Input Hitungan Fisik (Blind Count: Tanpa Sisa Sistem & Selisih) */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-2">
-                    Penghitungan Fisik Bahan Baku:
+                    Input Hasil Hitungan Fisik Riil di Bar:
                   </label>
 
                   <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-100/90 text-slate-600 font-black border-b border-slate-200 text-[11px]">
                         <tr>
-                          <th className="p-3">Bahan Baku</th>
-                          <th className="p-3 text-center">Sisa Sistem POS</th>
-                          <th className="p-3 text-center">Hitungan Fisik Riil</th>
-                          <th className="p-3 text-center">Selisih</th>
+                          <th className="p-3">Bahan Baku & Kategori</th>
+                          <th className="p-3 text-center w-48 sm:w-56">Input Hitungan Fisik Riil</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {materials.map((mat) => {
-                          const expectedStock = Number((mat.startStock + mat.stockIn - mat.usedSystem).toFixed(2));
-                          const countedVal = parseFloat(opnameCounts[mat.id]);
-                          const actualCount = isNaN(countedVal) ? 0 : countedVal;
-                          const variance = Number((actualCount - expectedStock).toFixed(2));
-
                           return (
                             <tr key={mat.id} className="hover:bg-slate-50/80 transition-colors">
                               <td className="p-3">
-                                <div className="font-bold text-slate-900">{mat.name}</div>
-                                <span className="text-[10px] text-slate-400">{mat.category} • Satuan {mat.unit}</span>
-                              </td>
-
-                              <td className="p-3 text-center font-mono font-bold text-slate-600">
-                                {expectedStock} {mat.unit}
+                                <div className="font-bold text-slate-900 text-xs sm:text-sm">{mat.name}</div>
+                                <span className="text-[10px] text-slate-400 font-medium">{mat.category} • Satuan: {mat.unit}</span>
                               </td>
 
                               <td className="p-3 text-center">
-                                <div className="inline-flex items-center gap-1">
+                                <div className="inline-flex items-center justify-center gap-2">
                                   <input
                                     type="number"
                                     min="0"
                                     step="0.05"
                                     value={opnameCounts[mat.id] !== undefined ? opnameCounts[mat.id] : ''}
                                     onChange={(e) => handleOpnameCountChange(mat.id, e.target.value)}
-                                    className="w-24 text-center p-1.5 bg-slate-50 border-2 border-slate-200 focus:border-sky-500 rounded-xl font-mono font-black text-slate-900 focus:bg-white outline-none"
+                                    className="w-28 sm:w-32 text-center p-2 bg-slate-50 border-2 border-slate-200 focus:border-sky-500 rounded-xl font-mono font-black text-slate-900 focus:bg-white outline-none text-xs sm:text-sm"
                                     placeholder="0"
                                   />
-                                  <span className="text-[10px] font-bold text-slate-500">{mat.unit}</span>
+                                  <span className="text-xs font-bold text-slate-600 w-8 text-left">{mat.unit}</span>
                                 </div>
-                              </td>
-
-                              <td className="p-3 text-center">
-                                <span className={`inline-flex items-center gap-1 font-bold text-[11px] px-2 py-0.5 rounded-lg ${
-                                  variance === 0 
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                                    : variance < 0 
-                                    ? 'bg-rose-50 text-rose-700 border border-rose-200' 
-                                    : 'bg-blue-50 text-blue-700 border border-blue-200'
-                                }`}>
-                                  {variance === 0 ? '🟢 Akurat' : variance < 0 ? `🔴 Defisit (${variance})` : `🔵 Surplus (+${variance})`}
-                                </span>
                               </td>
                             </tr>
                           );
@@ -830,7 +806,7 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                     type="text"
                     value={opnameNotes}
                     onChange={(e) => setOpnameNotes(e.target.value)}
-                    placeholder="Contoh: Fresh milk tumpah 0.5L saat rush hour jam 14:00"
+                    placeholder="Contoh: Fresh milk tumpah 0.5L saat rush hour siang"
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-sky-500/20 outline-none"
                   />
                 </div>
@@ -841,12 +817,12 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                     className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-sky-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Check size={16} />
-                    <span>Simpan Hasil Stock Opname Harian</span>
+                    <span>Kirim & Simpan Hasil Stock Opname</span>
                   </button>
                 </div>
               </form>
 
-              {/* Log Riwayat Opname Terakhir */}
+              {/* Log Riwayat Opname Terakhir (Khusus Staff: Menampilkan Input Fisik Saja) */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                   <span className="font-black text-xs text-slate-800 flex items-center gap-1.5">
@@ -877,22 +853,12 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                           </span>
                         </div>
 
-                        {log.totalDeficitCost > 0 && (
-                          <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 p-2 rounded-xl text-rose-800 text-[11px] font-bold">
-                            <AlertCircle size={14} className="text-rose-600 shrink-0" />
-                            <span>Total Kerugian Selisih / Wastage: Rp {log.totalDeficitCost.toLocaleString('id-ID')}</span>
-                          </div>
-                        )}
-
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[11px]">
                           {log.entries.slice(0, 6).map((entry, idx) => (
                             <div key={idx} className="bg-white border border-slate-200 p-2 rounded-xl">
                               <span className="font-bold text-slate-800 block truncate">{entry.materialName}</span>
-                              <div className="flex items-center justify-between text-[10px] text-slate-500 mt-0.5">
-                                <span>Fisik: {entry.actualCountedStock} {entry.unit}</span>
-                                <span className={entry.varianceQty < 0 ? 'text-rose-600 font-bold' : entry.varianceQty > 0 ? 'text-blue-600 font-bold' : 'text-emerald-600 font-bold'}>
-                                  {entry.varianceQty === 0 ? '0' : entry.varianceQty > 0 ? `+${entry.varianceQty}` : entry.varianceQty}
-                                </span>
+                              <div className="text-[10px] text-slate-600 font-bold mt-0.5">
+                                Fisik: <span className="text-sky-700 font-black">{entry.actualCountedStock} {entry.unit}</span>
                               </div>
                             </div>
                           ))}
