@@ -124,8 +124,7 @@ export default function ReportsPage() {
     stockRequests,
     addStaffStockIn,
     updateStockRequestStatus,
-    fulfillStockRequest,
-    submitDailyStockTake 
+    fulfillStockRequest 
   } = useInventoryStore();
 
   useEffect(() => {
@@ -162,20 +161,12 @@ export default function ReportsPage() {
   ]);
 
   // ==========================================
-  // STATE DAILY STOCK TAKING (OPNAME)
+  // STATE LAPORAN AUDIT STOK & SELISIH (OWNER READ-ONLY)
   // ==========================================
-  const [shiftName, setShiftName] = useState('Closing Harian');
-  const [conductorName, setConductorName] = useState(user?.name || 'Sari N. (Supervisor)');
-  const [stockTakeNotes, setStockTakeNotes] = useState('');
-  const [tempCountedStocks, setTempCountedStocks] = useState<{ [materialId: string]: string }>({});
-
-  useEffect(() => {
-    const initialCounts: { [materialId: string]: string } = {};
-    materials.forEach((mat) => {
-      initialCounts[mat.id] = String(mat.actualPhysicalStock);
-    });
-    setTempCountedStocks(initialCounts);
-  }, [materials]);
+  const [stockAuditSearch, setStockAuditSearch] = useState<string>('');
+  const [stockAuditCategory, setStockAuditCategory] = useState<string>('ALL');
+  const [stockAuditSubTab, setStockAuditSubTab] = useState<'materials' | 'logs'>('materials');
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   if (!isManager) {
     return null;
@@ -341,41 +332,6 @@ export default function ReportsPage() {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  const handleQuickFillSystemStock = () => {
-    const filled: { [materialId: string]: string } = {};
-    materials.forEach((mat) => {
-      const sisaSistem = Number((mat.startStock + mat.stockIn - mat.usedSystem).toFixed(2));
-      filled[mat.id] = String(sisaSistem);
-    });
-    setTempCountedStocks(filled);
-    setToastMsg('⚡ Input fisik otomatis diisi sesuai Sisa Sistem.');
-    setTimeout(() => setToastMsg(null), 2500);
-  };
-
-  const handleSubmitDailyStockTake = () => {
-    const parsedCounts: { [materialId: string]: number } = {};
-    for (const mat of materials) {
-      const inputStr = tempCountedStocks[mat.id];
-      const val = parseFloat(inputStr);
-      if (isNaN(val) || val < 0) {
-        setToastMsg(`⚠️ Jumlah fisik untuk "${mat.name}" tidak valid.`);
-        setTimeout(() => setToastMsg(null), 3000);
-        return;
-      }
-      parsedCounts[mat.id] = val;
-    }
-
-    submitDailyStockTake({
-      shiftName,
-      conductedBy: conductorName,
-      notes: stockTakeNotes,
-      countedStocks: parsedCounts,
-    });
-
-    setToastMsg(`🔒 Stock Taking "${shiftName}" berhasil disimpan & Laba Rugi terkoreksi!`);
-    setTimeout(() => setToastMsg(null), 3500);
-  };
-
   const handleExportCSV = () => {
     if (activeTab === 'sales') {
       const csvContent = "data:text/csv;charset=utf-8," 
@@ -404,17 +360,18 @@ export default function ReportsPage() {
       document.body.removeChild(link);
     } else if (activeTab === 'stock-take') {
       const csvContent = "data:text/csv;charset=utf-8," 
-        + "ID,Nama Bahan,Kategori,Satuan,HPP Unit,Stok Awal,Masuk,Terpakai POS,Sisa Sistem,Fisik Opname,Selisih Qty,Kerugian Selisih (IDR)\n"
+        + "ID,Nama Bahan,Kategori,Satuan,HPP Unit,Stok Awal,Masuk,Terpakai POS,Sisa Sistem,Fisik Terkini (Opname Staf),Selisih Qty,Kerugian Selisih (IDR),Status Audit\n"
         + materials.map(m => {
-          const sisa = m.startStock + m.stockIn - m.usedSystem;
-          const diff = m.actualPhysicalStock - sisa;
+          const sisa = Number((m.startStock + m.stockIn - m.usedSystem).toFixed(2));
+          const diff = Number((m.actualPhysicalStock - sisa).toFixed(2));
           const diffRp = diff * m.unitCost;
-          return `"${m.id}","${m.name}","${m.category}","${m.unit}",${m.unitCost},${m.startStock},${m.stockIn},${m.usedSystem},${sisa.toFixed(2)},${m.actualPhysicalStock},${diff.toFixed(2)},${diffRp.toFixed(0)}`;
+          const status = diff === 0 ? 'Cocok' : diff < 0 ? 'Defisit (Wastage)' : 'Surplus';
+          return `"${m.id}","${m.name}","${m.category}","${m.unit}",${m.unitCost},${m.startStock},${m.stockIn},${m.usedSystem},${sisa},${m.actualPhysicalStock},${diff},${diffRp.toFixed(0)},"${status}"`;
         }).join("\n");
       
       const link = document.createElement("a");
       link.setAttribute("href", encodeURI(csvContent));
-      link.setAttribute("download", `Hasil_Stock_Taking_Harian_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.setAttribute("download", `Laporan_Audit_Stok_${period}_${new Date().toISOString().slice(0, 10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -574,7 +531,7 @@ export default function ReportsPage() {
           </span>
         </button>
 
-        {/* Tab 4: Daily Stock Taking (Opname) */}
+        {/* Tab 4: Laporan Audit Stok (Opname) */}
         <button
           onClick={() => setActiveTab('stock-take')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm transition-all ${
@@ -584,10 +541,14 @@ export default function ReportsPage() {
           }`}
         >
           <ClipboardList size={16} />
-          <span>📋 3. Stock Taking Harian</span>
-          {totalWastageCost > 0 && (
+          <span>📋 3. Laporan Audit Stok</span>
+          {totalWastageCost > 0 ? (
             <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
               -Rp {(totalWastageCost / 1000).toFixed(0)}k
+            </span>
+          ) : (
+            <span className="bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
+              100% Akurat
             </span>
           )}
         </button>
@@ -1741,217 +1702,470 @@ export default function ReportsPage() {
       )}
 
       {/* ======================================================== */}
-      {/* TAB 3: STOCK TAKING HARIAN (DAILY OPNAME)                */}
+      {/* TAB 4: LAPORAN AUDIT STOK & SELISIH (OWNER READ-ONLY)    */}
       {/* ======================================================== */}
       {activeTab === 'stock-take' && (
         <div className="space-y-6 animate-fade-in">
           
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-6 border-b border-slate-100 gap-4">
+          {/* Header & Sub-Tab Switcher */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-4">
               <div>
-                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <ClipboardList size={22} className="text-indigo-600" />
-                  Lembar Stock Taking Harian (Opname Fisik Bar)
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <ClipboardList size={22} className="text-indigo-600" />
+                    <span>Laporan Audit Stok & Selisih Opname</span>
+                  </h2>
+                  <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200">
+                    Mode Pemantauan Owner
+                  </span>
+                </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Hitung fisik sisa bahan baku di akhir shift untuk mengaudit selisih (*variance*) dan kerugian (*wastage*)
+                  Audit perbandingan sisa sistem POS vs hasil hitung fisik staf toko, analisis kerugian selisih (*wastage*), dan riwayat log per shift.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              {/* Sub-tab Pill Switcher */}
+              <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-bold shrink-0">
                 <button
                   type="button"
-                  onClick={handleQuickFillSystemStock}
-                  className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border border-slate-200 active:scale-95"
+                  onClick={() => setStockAuditSubTab('materials')}
+                  className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                    stockAuditSubTab === 'materials'
+                      ? 'bg-white text-slate-900 shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  <RefreshCw size={14} />
-                  <span>⚡ Quick Fill Sisa Sistem</span>
+                  <Package size={14} />
+                  <span>Komparasi Bahan ({materials.length})</span>
                 </button>
-
                 <button
                   type="button"
-                  onClick={handleSubmitDailyStockTake}
-                  className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20 active:scale-95"
+                  onClick={() => setStockAuditSubTab('logs')}
+                  className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                    stockAuditSubTab === 'logs'
+                      ? 'bg-white text-slate-900 shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  <CheckCircle2 size={15} />
-                  <span>🔒 Simpan & Kunci Opname</span>
+                  <Clock size={14} />
+                  <span>Riwayat Shift ({stockTakeLogs.length})</span>
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
-              <div>
-                <label className="block font-bold text-slate-600 mb-1">Nama Sesi / Shift:</label>
-                <select
-                  value={shiftName}
-                  onChange={(e) => setShiftName(e.target.value)}
-                  className="w-full font-bold p-2 bg-white border border-slate-300 rounded-xl focus:outline-none"
-                >
-                  <option value="Shift 1 (Pagi)">Shift 1 (Pagi) • 07:00 - 15:00</option>
-                  <option value="Shift 2 (Malam)">Shift 2 (Malam) • 15:00 - 22:00</option>
-                  <option value="Closing Harian">Closing Harian (Tutup Outlet)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-600 mb-1">Petugas Pemeriksa:</label>
-                <input
-                  type="text"
-                  value={conductorName}
-                  onChange={(e) => setConductorName(e.target.value)}
-                  className="w-full font-bold p-2 bg-white border border-slate-300 rounded-xl text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-600 mb-1">Catatan Opname (Opsional):</label>
-                <input
-                  type="text"
-                  value={stockTakeNotes}
-                  onChange={(e) => setStockTakeNotes(e.target.value)}
-                  placeholder="Contoh: Kalibrasi grinder 3 shot..."
-                  className="w-full p-2 bg-white border border-slate-300 rounded-xl text-slate-800"
-                />
-              </div>
+            {/* Notice Info Banner */}
+            <div className="p-3.5 bg-indigo-50/60 border border-indigo-100 rounded-2xl flex items-center gap-3 text-xs text-indigo-950 font-medium">
+              <ShieldAlert size={18} className="text-indigo-600 shrink-0" />
+              <span>
+                <strong>Info Owner:</strong> Penginputan opname fisik dilakukan langsung oleh staf operasional toko di menu <em>Stock Opname (Shift)</em> pada aplikasi POS kasir.
+              </span>
             </div>
 
-            {/* TABEL INPUT STOCK TAKING */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider bg-slate-50/50">
-                    <th className="p-3">Bahan Baku</th>
-                    <th className="p-3">Kategori</th>
-                    <th className="p-3 text-right">HPP / Unit</th>
-                    <th className="p-3 text-center">Stok Awal</th>
-                    <th className="p-3 text-center">Masuk (+)</th>
-                    <th className="p-3 text-center bg-amber-50/50 text-amber-900">Terpakai (POS)</th>
-                    <th className="p-3 text-center bg-slate-100/70 font-bold">Sisa Sistem</th>
-                    <th className="p-3 text-center bg-indigo-50 text-indigo-950 font-black w-36">
-                      Hitung Fisik (Opname)
-                    </th>
-                    <th className="p-3 text-center">Selisih Qty</th>
-                    <th className="p-3 text-right">Nilai Selisih (Rp)</th>
-                    <th className="p-3 text-center">Status Audit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {materials.map((mat) => {
-                    const sisaSistem = Number((mat.startStock + mat.stockIn - mat.usedSystem).toFixed(2));
-                    const currentInput = tempCountedStocks[mat.id] !== undefined ? tempCountedStocks[mat.id] : String(mat.actualPhysicalStock);
-                    const parsedVal = parseFloat(currentInput) || 0;
-                    const selisihQty = Number((parsedVal - sisaSistem).toFixed(2));
-                    const selisihRp = selisihQty * mat.unitCost;
-                    const isAccurate = Math.abs(selisihQty) === 0;
-                    const isDeficit = selisihQty < 0;
+            {/* Ringkasan Metrik 4 Kartu */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+              
+              {/* Card 1: Total Kerugian Selisih */}
+              <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-4.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-rose-800">
+                    Total Kerugian Selisih (Wastage)
+                  </span>
+                  <AlertTriangle size={16} className="text-rose-600" />
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-rose-700 font-mono">
+                  -Rp {totalWastageCost.toLocaleString('id-ID')}
+                </div>
+                <p className="text-[11px] text-rose-800 mt-1 font-semibold">
+                  {materials.filter(m => (m.actualPhysicalStock - Number((m.startStock + m.stockIn - m.usedSystem).toFixed(2))) < 0).length} bahan mengalami selisih minus
+                </p>
+              </div>
 
+              {/* Card 2: Nilai Fisik Bahan */}
+              <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800">
+                    Nilai Stok Fisik Terkini
+                  </span>
+                  <Coins size={16} className="text-emerald-600" />
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-emerald-800 font-mono">
+                  Rp {totalActualPhysicalValue.toLocaleString('id-ID')}
+                </div>
+                <p className="text-[11px] text-emerald-700 mt-1 font-semibold">
+                  Sisa teoretis: Rp {totalRemainingSystemValue.toLocaleString('id-ID')}
+                </p>
+              </div>
+
+              {/* Card 3: Akurasi Stok */}
+              <div className="bg-indigo-50/60 border border-indigo-200 rounded-2xl p-4.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-indigo-800">
+                    Akurasi Stok Bar
+                  </span>
+                  <CheckCircle2 size={16} className="text-indigo-600" />
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-indigo-700 font-mono">
+                  {materials.length > 0 ? ((materials.filter(m => Math.abs(m.actualPhysicalStock - Number((m.startStock + m.stockIn - m.usedSystem).toFixed(2))) === 0).length / materials.length) * 100).toFixed(0) : '100'}%
+                </div>
+                <p className="text-[11px] text-indigo-700 mt-1 font-semibold">
+                  {materials.filter(m => Math.abs(m.actualPhysicalStock - Number((m.startStock + m.stockIn - m.usedSystem).toFixed(2))) === 0).length} dari {materials.length} bahan 100% cocok
+                </p>
+              </div>
+
+              {/* Card 4: Total Belanja Inbound */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                    Total Belanja Masuk
+                  </span>
+                  <Truck size={16} className="text-slate-600" />
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                  Rp {totalPurchasesToday.toLocaleString('id-ID')}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1 font-semibold">
+                  {stockInLogs.length} surat jalan diterima
+                </p>
+              </div>
+
+            </div>
+          </div>
+
+          {/* SUB-VIEW 1: TABEL KOMPARASI BAHAN (READ-ONLY) */}
+          {stockAuditSubTab === 'materials' && (
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
+                  <Package size={18} className="text-indigo-600" />
+                  <span>Komparasi Rinci Stok Fisik (Opname Staf) vs Sistem POS</span>
+                </h3>
+
+                {/* Search & Category Filter */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative w-full sm:w-56">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={stockAuditSearch}
+                      onChange={(e) => setStockAuditSearch(e.target.value)}
+                      placeholder="Cari nama bahan..."
+                      className="w-full pl-8 pr-7 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl text-xs font-mono outline-none transition-all placeholder:font-sans"
+                    />
+                    {stockAuditSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setStockAuditSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    value={stockAuditCategory}
+                    onChange={(e) => setStockAuditCategory(e.target.value)}
+                    className="text-xs font-bold p-1.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none"
+                  >
+                    <option value="ALL">Semua Kategori</option>
+                    <option value="Kopi">Kopi</option>
+                    <option value="Dairy">Dairy</option>
+                    <option value="Sirup">Sirup</option>
+                    <option value="Bubuk">Bubuk</option>
+                    <option value="Pastry">Pastry</option>
+                    <option value="Packaging">Packaging</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Table of materials */}
+              <div className="overflow-x-auto">
+                {(() => {
+                  const filteredMaterials = materials.filter((mat) => {
+                    const matchesSearch = !stockAuditSearch.trim() || mat.name.toLowerCase().includes(stockAuditSearch.trim().toLowerCase());
+                    const matchesCategory = stockAuditCategory === 'ALL' || mat.category === stockAuditCategory;
+                    return matchesSearch && matchesCategory;
+                  });
+
+                  if (filteredMaterials.length === 0) {
                     return (
-                      <tr key={mat.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-bold text-slate-900">{mat.name}</td>
-                        <td className="p-3">
-                          <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold text-[10px]">
-                            {mat.category}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right font-mono text-slate-600 font-semibold">
-                          Rp {mat.unitCost.toLocaleString('id-ID')}/{mat.unit}
-                        </td>
-                        <td className="p-3 text-center font-mono text-slate-600">{mat.startStock} {mat.unit}</td>
-                        <td className="p-3 text-center font-mono text-emerald-600 font-bold">
-                          {mat.stockIn > 0 ? `+${mat.stockIn}` : '0'} {mat.unit}
-                        </td>
-                        <td className="p-3 text-center font-mono font-bold text-amber-800 bg-amber-50/30">
-                          {mat.usedSystem} {mat.unit}
-                        </td>
-                        <td className="p-3 text-center font-mono font-black text-slate-800 bg-slate-50/60">
-                          {sisaSistem} {mat.unit}
-                        </td>
-                        
-                        <td className="p-2.5 text-center bg-indigo-50/30">
-                          <div className="flex items-center justify-center gap-1">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={currentInput}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setTempCountedStocks(prev => ({ ...prev, [mat.id]: val }));
-                              }}
-                              className="w-24 text-center font-mono font-black text-xs p-1.5 bg-white border-2 border-indigo-400 rounded-xl focus:border-indigo-600 focus:outline-none text-slate-900"
-                            />
-                            <span className="text-[10px] font-bold text-slate-500">{mat.unit}</span>
-                          </div>
-                        </td>
-
-                        <td className="p-3 text-center font-mono font-bold">
-                          {isAccurate ? (
-                            <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">0</span>
-                          ) : isDeficit ? (
-                            <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">{selisihQty}</span>
-                          ) : (
-                            <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">+{selisihQty}</span>
-                          )}
-                        </td>
-
-                        <td className="p-3 text-right font-mono font-black">
-                          {isAccurate ? (
-                            <span className="text-emerald-700">Rp 0</span>
-                          ) : isDeficit ? (
-                            <span className="text-rose-600">-Rp {Math.abs(selisihRp).toLocaleString('id-ID')}</span>
-                          ) : (
-                            <span className="text-blue-600">+Rp {selisihRp.toLocaleString('id-ID')}</span>
-                          )}
-                        </td>
-
-                        <td className="p-3 text-center font-bold">
-                          {isAccurate ? (
-                            <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                              <CheckCircle2 size={12} /> Cocok
-                            </span>
-                          ) : isDeficit ? (
-                            <span className="bg-rose-100 text-rose-800 text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                              <AlertTriangle size={12} /> Wastage
-                            </span>
-                          ) : (
-                            <span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                              <Info size={12} /> Surplus
-                            </span>
-                          )}
-                        </td>
-
-                      </tr>
+                      <div className="text-center py-10 text-slate-400">
+                        <Package size={36} className="mx-auto mb-2 opacity-30" />
+                        <p className="text-xs">
+                          {stockAuditSearch.trim()
+                            ? `Tidak ditemukan bahan dengan kata kunci "${stockAuditSearch}".`
+                            : 'Tidak ada bahan pada kategori ini.'}
+                        </p>
+                      </div>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  }
 
-            <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3">
-              <div className="text-xs text-slate-500 font-semibold flex items-center gap-2">
-                <ShieldAlert size={16} className="text-amber-600" />
-                <span>Selisih minus otomatis dihitung sebagai biaya <strong>Kerugian Bahan / Wastage</strong> pada laporan Laba Rugi.</span>
+                  return (
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider bg-slate-50/70">
+                          <th className="p-3">Bahan Baku</th>
+                          <th className="p-3">Kategori</th>
+                          <th className="p-3 text-right">HPP / Unit</th>
+                          <th className="p-3 text-center">Stok Awal</th>
+                          <th className="p-3 text-center">Masuk (+)</th>
+                          <th className="p-3 text-center bg-amber-50/50 text-amber-900">Terpakai (POS)</th>
+                          <th className="p-3 text-center bg-slate-100/70 font-bold">Sisa Sistem</th>
+                          <th className="p-3 text-center bg-indigo-50/80 text-indigo-950 font-black">
+                            Fisik Terkini (Opname Staf)
+                          </th>
+                          <th className="p-3 text-center">Selisih Qty</th>
+                          <th className="p-3 text-right">Nilai Selisih (Rp)</th>
+                          <th className="p-3 text-center">Status Audit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {filteredMaterials.map((mat) => {
+                          const sisaSistem = Number((mat.startStock + mat.stockIn - mat.usedSystem).toFixed(2));
+                          const selisihQty = Number((mat.actualPhysicalStock - sisaSistem).toFixed(2));
+                          const selisihRp = selisihQty * mat.unitCost;
+                          const isAccurate = Math.abs(selisihQty) === 0;
+                          const isDeficit = selisihQty < 0;
+
+                          return (
+                            <tr key={mat.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="p-3 font-bold text-slate-900">
+                                <div>
+                                  <span>{mat.name}</span>
+                                  <span className="block text-[10px] font-mono text-slate-400">{mat.id}</span>
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                  {mat.category}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-mono text-slate-600 font-semibold">
+                                Rp {mat.unitCost.toLocaleString('id-ID')}/{mat.unit}
+                              </td>
+                              <td className="p-3 text-center font-mono text-slate-600">{mat.startStock} {mat.unit}</td>
+                              <td className="p-3 text-center font-mono text-emerald-600 font-bold">
+                                {mat.stockIn > 0 ? `+${mat.stockIn}` : '0'} {mat.unit}
+                              </td>
+                              <td className="p-3 text-center font-mono font-bold text-amber-800 bg-amber-50/30">
+                                {mat.usedSystem} {mat.unit}
+                              </td>
+                              <td className="p-3 text-center font-mono font-black text-slate-800 bg-slate-50/60">
+                                {sisaSistem} {mat.unit}
+                              </td>
+                              
+                              {/* FISIK TERKINI (READ-ONLY WITH CLEAN BADGE) */}
+                              <td className="p-3 text-center bg-indigo-50/30">
+                                <span className="font-mono font-black text-indigo-900 bg-indigo-100/70 border border-indigo-200 px-3 py-1 rounded-xl text-xs inline-block">
+                                  {mat.actualPhysicalStock} {mat.unit}
+                                </span>
+                              </td>
+
+                              <td className="p-3 text-center font-mono font-bold">
+                                {isAccurate ? (
+                                  <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">0</span>
+                                ) : isDeficit ? (
+                                  <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">{selisihQty}</span>
+                                ) : (
+                                  <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">+{selisihQty}</span>
+                                )}
+                              </td>
+
+                              <td className="p-3 text-right font-mono font-black">
+                                {isAccurate ? (
+                                  <span className="text-emerald-700">Rp 0</span>
+                                ) : isDeficit ? (
+                                  <span className="text-rose-600">-Rp {Math.abs(selisihRp).toLocaleString('id-ID')}</span>
+                                ) : (
+                                  <span className="text-blue-600">+Rp {selisihRp.toLocaleString('id-ID')}</span>
+                                )}
+                              </td>
+
+                              <td className="p-3 text-center font-bold">
+                                {isAccurate ? (
+                                  <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                                    <CheckCircle2 size={12} /> Cocok
+                                  </span>
+                                ) : isDeficit ? (
+                                  <span className="bg-rose-100 text-rose-800 text-[10px] px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                                    <AlertTriangle size={12} /> Defisit (Wastage)
+                                  </span>
+                                ) : (
+                                  <span className="bg-blue-100 text-blue-800 text-[10px] px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                                    <Info size={12} /> Surplus
+                                  </span>
+                                )}
+                              </td>
+
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3">
+                <div className="text-xs text-slate-500 font-semibold flex items-center gap-2">
+                  <ShieldAlert size={16} className="text-amber-600" />
+                  <span>Kerugian selisih bahan otomatis terintegrasi ke <strong>Laporan Laba Rugi (P&L)</strong> sebagai penambah HPP aktual.</span>
+                </div>
+
                 <div className="text-right">
                   <span className="text-[10px] text-slate-500 font-bold uppercase block">Total Kerugian Selisih (Wastage)</span>
                   <span className="font-mono text-lg font-black text-rose-600">
                     -Rp {totalWastageCost.toLocaleString('id-ID')}
                   </span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleSubmitDailyStockTake}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-3 rounded-2xl shadow-md shadow-indigo-600/20 active:scale-95 transition-all"
-                >
-                  Simpan & Kunci Opname
-                </button>
               </div>
-            </div>
 
-          </div>
+            </div>
+          )}
+
+          {/* SUB-VIEW 2: RIWAYAT LOG AUDIT PER SHIFT (LOGS) */}
+          {stockAuditSubTab === 'logs' && (
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div>
+                  <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
+                    <Clock size={18} className="text-indigo-600" />
+                    <span>Riwayat Sesi Stock Opname Staf Toko (Per Shift & Closing)</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Catatan rekonsiliasi fisik yang dikirim oleh staf toko saat serah terima shift atau tutup gerai.
+                  </p>
+                </div>
+              </div>
+
+              {stockTakeLogs.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <ClipboardList size={36} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">Belum ada riwayat sesi stock taking yang disubmit oleh staf toko.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {stockTakeLogs.map((log) => {
+                    const isExpanded = expandedLogId === log.id;
+                    const logDate = new Date(log.date);
+
+                    return (
+                      <div key={log.id} className="border border-slate-200 rounded-2xl overflow-hidden hover:border-slate-300 transition-all bg-slate-50/50">
+                        <div 
+                          onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                          className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-100/70 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                              <ClipboardList size={18} />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-900 text-xs sm:text-sm">{log.shiftName}</span>
+                                <span className="text-[10px] font-mono text-slate-400">({log.id})</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                Petugas: <strong className="text-slate-700">{log.conductedBy}</strong> • {logDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })} pk {logDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                              </p>
+                              {log.notes && (
+                                <p className="text-[11px] text-slate-600 italic mt-1 bg-white/70 px-2 py-0.5 rounded-md border border-slate-200 inline-block">
+                                  "{log.notes}"
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
+                            <div className="text-left sm:text-right">
+                              <span className="text-[10px] text-slate-400 font-bold block uppercase">Selisih Kerugian</span>
+                              <span className={`font-mono text-xs sm:text-sm font-black ${
+                                (log.totalDeficitCost || 0) > 0 ? 'text-rose-600' : 'text-emerald-700'
+                              }`}>
+                                {(log.totalDeficitCost || 0) > 0 
+                                  ? `-Rp ${log.totalDeficitCost.toLocaleString('id-ID')}`
+                                  : 'Rp 0 (Akurat)'}
+                              </span>
+                            </div>
+
+                            <span className="text-xs font-bold text-indigo-600 bg-white border border-indigo-200 px-2.5 py-1 rounded-xl shadow-xs">
+                              {isExpanded ? 'Tutup Rincian ▲' : 'Buka Rincian ▼'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Breakdown entries */}
+                        {isExpanded && (
+                          <div className="p-4 bg-white border-t border-slate-200 text-xs">
+                            <h4 className="font-bold text-slate-700 mb-2 uppercase text-[10px] tracking-wider">
+                              Rincian Hasil Audit Bahan Baku Sesi Ini ({log.entries.length} Bahan):
+                            </h4>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left">
+                                <thead>
+                                  <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase text-[10px] bg-slate-50">
+                                    <th className="p-2">Nama Bahan</th>
+                                    <th className="p-2 text-right">HPP Unit</th>
+                                    <th className="p-2 text-center">Sistem Teoretis</th>
+                                    <th className="p-2 text-center bg-indigo-50/50">Fisik Terhitung</th>
+                                    <th className="p-2 text-center">Selisih Qty</th>
+                                    <th className="p-2 text-right">Nilai Selisih</th>
+                                    <th className="p-2 text-center">Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-medium">
+                                  {log.entries.map((ent, idx) => (
+                                    <tr key={idx} className="hover:bg-slate-50/50">
+                                      <td className="p-2 font-bold text-slate-800">{ent.materialName}</td>
+                                      <td className="p-2 text-right font-mono text-slate-600">Rp {ent.unitCost.toLocaleString('id-ID')}</td>
+                                      <td className="p-2 text-center font-mono">{ent.systemExpectedStock} {ent.unit}</td>
+                                      <td className="p-2 text-center font-mono font-bold text-indigo-900 bg-indigo-50/30">
+                                        {ent.actualCountedStock} {ent.unit}
+                                      </td>
+                                      <td className="p-2 text-center font-mono font-bold">
+                                        {ent.varianceQty === 0 ? (
+                                          <span className="text-emerald-600">0</span>
+                                        ) : ent.varianceQty < 0 ? (
+                                          <span className="text-rose-600">{ent.varianceQty}</span>
+                                        ) : (
+                                          <span className="text-blue-600">+{ent.varianceQty}</span>
+                                        )}
+                                      </td>
+                                      <td className="p-2 text-right font-mono font-black">
+                                        {ent.varianceCost === 0 ? (
+                                          <span className="text-emerald-700">Rp 0</span>
+                                        ) : ent.varianceCost < 0 ? (
+                                          <span className="text-rose-600">-Rp {Math.abs(ent.varianceCost).toLocaleString('id-ID')}</span>
+                                        ) : (
+                                          <span className="text-blue-600">+Rp {ent.varianceCost.toLocaleString('id-ID')}</span>
+                                        )}
+                                      </td>
+                                      <td className="p-2 text-center">
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                          ent.status === 'accurate' ? 'bg-emerald-100 text-emerald-800' :
+                                          ent.status === 'deficit' ? 'bg-rose-100 text-rose-800' :
+                                          'bg-blue-100 text-blue-800'
+                                        }`}>
+                                          {ent.status === 'accurate' ? 'Cocok' : ent.status === 'deficit' ? 'Wastage' : 'Surplus'}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+            </div>
+          )}
 
         </div>
       )}
