@@ -14,7 +14,8 @@ import {
   Building2,
   Info,
   Scale,
-  Calendar
+  Calendar,
+  Search
 } from 'lucide-react';
 import { 
   useInventoryStore, 
@@ -66,9 +67,8 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
   // ==========================================
   // 2. STATE FORM MENU 2: STOK MASUK (PENERIMAAN BARANG)
   // ==========================================
-  const [inSupplier, setInSupplier] = useState('');
   const [inInvoice, setInInvoice] = useState('');
-  const [inNotes, setInNotes] = useState('');
+  const [stockInSearch, setStockInSearch] = useState('');
   const [inItems, setInItems] = useState<{ materialId: string; qty: number }[]>([
     { materialId: materials[0]?.id || 'mat_1', qty: 5 }
   ]);
@@ -146,16 +146,14 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
     }
 
     addStaffStockIn({
-      supplierName: inSupplier || 'Supplier Reguler',
-      invoiceNo: inInvoice || `SJ-${Date.now().toString().slice(-4)}`,
+      supplierName: 'Penerimaan Toko',
+      invoiceNo: inInvoice.trim() || `SJ-${Date.now().toString().slice(-4)}`,
       receivedBy: user?.name || 'Staff Toko',
-      notes: inNotes,
+      notes: '',
       items: inItems,
     });
 
-    setInSupplier('');
     setInInvoice('');
-    setInNotes('');
     setInItems([{ materialId: materials[0]?.id || 'mat_1', qty: 5 }]);
     showToast('✅ Stok masuk berhasil disimpan & stok aktif langsung bertambah!');
   };
@@ -524,10 +522,10 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                   <div>
                     <h3 className="font-black text-sm text-emerald-950 flex items-center gap-1.5">
                       <Truck size={16} className="text-emerald-600" />
-                      <span>Pencatatan Barang Masuk (Delivery Sederhana)</span>
+                      <span>Pencatatan Barang Masuk (Stok Masuk)</span>
                     </h3>
                     <p className="text-[11px] text-emerald-800/80 mt-0.5">
-                      Catat kiriman bahan baku dari supplier/kurir. <strong>Isi jumlah fisik yang datang tanpa repot hitung harga/HPP.</strong>
+                      Catat kiriman bahan baku yang datang. <strong>Cukup masukkan No. Surat Jalan dan jumlah fisik barang.</strong>
                     </p>
                   </div>
                   <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-lg border border-emerald-200 shrink-0">
@@ -535,28 +533,15 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Nama Supplier / Pengirim:</label>
-                    <input
-                      type="text"
-                      value={inSupplier}
-                      onChange={(e) => setInSupplier(e.target.value)}
-                      placeholder="Contoh: Cimory / PT Nusa Boga"
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">No Surat Jalan (Opsional):</label>
-                    <input
-                      type="text"
-                      value={inInvoice}
-                      onChange={(e) => setInInvoice(e.target.value)}
-                      placeholder="Contoh: SJ-2026/09/01"
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                    />
-                  </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Nomor Surat Jalan / Bukti Kirim:</label>
+                  <input
+                    type="text"
+                    value={inInvoice}
+                    onChange={(e) => setInInvoice(e.target.value)}
+                    placeholder="Contoh: SJ-2026/09/01 (Opsional, otomatis dibuat jika kosong)"
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none text-slate-900"
+                  />
                 </div>
 
                 {/* Item Bahan Masuk */}
@@ -566,7 +551,7 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                     <button
                       type="button"
                       onClick={handleAddInItem}
-                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-100/80 hover:bg-emerald-100 px-2.5 py-1 rounded-xl border border-emerald-200 transition-colors"
+                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-100/80 hover:bg-emerald-100 px-2.5 py-1 rounded-xl border border-emerald-200 transition-colors cursor-pointer"
                     >
                       <Plus size={13} /> Tambah Bahan
                     </button>
@@ -615,7 +600,7 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                             <button
                               type="button"
                               onClick={() => handleRemoveInItem(idx)}
-                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                             >
                               <Trash2 size={15} />
                             </button>
@@ -624,17 +609,6 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                       );
                     })}
                   </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Catatan Kondisi Barang (Opsional):</label>
-                  <input
-                    type="text"
-                    value={inNotes}
-                    onChange={(e) => setInNotes(e.target.value)}
-                    placeholder="Contoh: Kemasan tersegel rapi, suhu dingin terjaga"
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/20 outline-none"
-                  />
                 </div>
 
                 <div className="pt-1">
@@ -648,58 +622,93 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                 </div>
               </form>
 
-              {/* Log Riwayat Stok Masuk */}
+              {/* Log Riwayat Stok Masuk dengan Fitur Pencarian By Nomor Surat Jalan */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                  <span className="font-black text-xs text-slate-800 flex items-center gap-1.5">
-                    <Truck size={15} className="text-slate-500" />
-                    <span>Riwayat Penerimaan Barang Masuk (Inbound Logs)</span>
-                  </span>
-                  <span className="text-[11px] text-slate-500 font-medium">Total: {stockInLogs.length} Surat Jalan</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
+                  <div>
+                    <span className="font-black text-xs text-slate-800 flex items-center gap-1.5">
+                      <Truck size={15} className="text-slate-500" />
+                      <span>Riwayat Penerimaan Barang Masuk (Inbound Logs)</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium">Total: {stockInLogs.length} Surat Jalan</span>
+                  </div>
+
+                  {/* Search bar No Surat Jalan */}
+                  <div className="relative w-full sm:w-60">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={stockInSearch}
+                      onChange={(e) => setStockInSearch(e.target.value)}
+                      placeholder="Cari No Surat Jalan..."
+                      className="w-full pl-8 pr-7 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl text-xs font-mono outline-none transition-all placeholder:font-sans"
+                    />
+                    {stockInSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setStockInSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {stockInLogs.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
-                    <Truck size={32} className="mx-auto mb-2 opacity-40" />
-                    <p className="text-xs">Belum ada riwayat penerimaan barang masuk.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {stockInLogs.slice().reverse().map((log) => (
-                      <div key={log.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-xs text-slate-900">{log.supplierName}</span>
-                            <span className="text-[10px] bg-slate-200 text-slate-800 font-mono px-2 py-0.5 rounded-lg">
-                              {log.invoiceNo}
+                {(() => {
+                  const filteredLogs = stockInLogs
+                    .slice()
+                    .reverse()
+                    .filter((log) => 
+                      log.invoiceNo.toLowerCase().includes(stockInSearch.trim().toLowerCase())
+                    );
+
+                  if (filteredLogs.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
+                        <Truck size={32} className="mx-auto mb-2 opacity-40" />
+                        <p className="text-xs">
+                          {stockInSearch.trim() 
+                            ? `Tidak ada surat jalan dengan nomor "${stockInSearch}".`
+                            : 'Belum ada riwayat penerimaan barang masuk.'}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2.5">
+                      {filteredLogs.map((log) => (
+                        <div key={log.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                <span className="text-[10px] bg-emerald-100 text-emerald-950 font-mono font-bold px-2 py-0.5 rounded-md border border-emerald-200">
+                                  No Surat Jalan: {log.invoiceNo}
+                                </span>
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              {new Date(log.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
-                          <span className="text-[10px] text-slate-500 font-medium">
-                            {new Date(log.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
 
-                        <div className="flex flex-wrap gap-1.5">
-                          {log.items.map((item, idx) => (
-                            <span key={idx} className="bg-white border border-slate-200 px-2.5 py-1 rounded-xl text-[11px] font-bold text-slate-800">
-                              {item.materialName}: <strong className="text-emerald-600">+{item.qty} {item.unit}</strong>
-                            </span>
-                          ))}
-                        </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {log.items.map((item, idx) => (
+                              <span key={idx} className="bg-white border border-slate-200 px-2.5 py-1 rounded-xl text-[11px] font-bold text-slate-800">
+                                {item.materialName}: <strong className="text-emerald-600">+{item.qty} {item.unit}</strong>
+                              </span>
+                            ))}
+                          </div>
 
-                        {log.notes && (
-                          <p className="text-[11px] text-slate-600 italic bg-white p-2 rounded-xl border border-slate-200/70">
-                            "{log.notes}"
-                          </p>
-                        )}
-
-                        <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-200/60">
-                          Diterima oleh: <strong>{log.receivedBy}</strong>
+                          <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-200/60">
+                            Diterima oleh: <strong>{log.receivedBy}</strong>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
             </div>

@@ -37,7 +37,9 @@ import {
   CalendarDays,
   Send,
   XCircle,
-  Clock3
+  Clock3,
+  Search,
+  X
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -145,6 +147,7 @@ export default function ReportsPage() {
   const [invoiceNo, setInvoiceNo] = useState('');
   const [receiverName, setReceiverName] = useState(user?.name || 'Sari N. (Store Staff)');
   const [stockInNotes, setStockInNotes] = useState('');
+  const [stockInSearch, setStockInSearch] = useState('');
   const [stockInItems, setStockInItems] = useState<{ materialId: string; qty: number }[]>([
     { materialId: materials[0]?.id || 'mat_1', qty: 5 }
   ]);
@@ -1126,56 +1129,98 @@ export default function ReportsPage() {
 
           {/* 2. RIWAYAT STOK MASUK */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-slate-100 gap-3">
               <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
                 <FileText size={18} className="text-indigo-600" />
                 Riwayat Surat Jalan & Pembelian Stok Masuk
               </h3>
+
+              {/* Search bar No Surat Jalan */}
+              <div className="relative w-full sm:w-64">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={stockInSearch}
+                  onChange={(e) => setStockInSearch(e.target.value)}
+                  placeholder="Cari No Surat Jalan..."
+                  className="w-full pl-8 pr-7 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl text-xs font-mono outline-none transition-all placeholder:font-sans"
+                />
+                {stockInSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setStockInSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider bg-slate-50/50">
-                    <th className="p-3">Waktu & Tanggal</th>
-                    <th className="p-3">Supplier Vendor</th>
-                    <th className="p-3">No Surat Jalan / PO</th>
-                    <th className="p-3">Rincian Bahan Masuk</th>
-                    <th className="p-3">Penerima</th>
-                    <th className="p-3 text-right">Nilai Pembelian (IDR)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {stockInLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="p-3 font-mono text-slate-600">
-                        {new Date(log.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })} • {new Date(log.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
-                      </td>
-                      <td className="p-3 font-bold text-slate-900 flex items-center gap-1.5">
-                        <Building2 size={14} className="text-slate-400" />
-                        <span>{log.supplierName}</span>
-                      </td>
-                      <td className="p-3 font-mono font-semibold text-indigo-700 bg-indigo-50/40 rounded-lg">
-                        {log.invoiceNo}
-                      </td>
-                      <td className="p-3 text-slate-700">
-                        <div className="flex flex-wrap gap-1">
-                          {log.items.map((it, i) => (
-                            <span key={i} className="bg-slate-100 px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-800">
-                              {it.materialName}: <strong>+{it.qty} {it.unit}</strong>
-                            </span>
-                          ))}
-                        </div>
-                        {log.notes && <p className="text-[10px] text-slate-400 italic mt-0.5">"{log.notes}"</p>}
-                      </td>
-                      <td className="p-3 text-slate-600 font-semibold">{log.receivedBy}</td>
-                      <td className="p-3 text-right font-mono font-black text-slate-900">
-                        Rp {log.totalAmount.toLocaleString('id-ID')}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {(() => {
+                const filteredLogs = stockInLogs.filter((log) =>
+                  log.invoiceNo.toLowerCase().includes(stockInSearch.trim().toLowerCase())
+                );
+
+                if (filteredLogs.length === 0) {
+                  return (
+                    <div className="text-center py-10 text-slate-400">
+                      <Truck size={36} className="mx-auto mb-2 opacity-30" />
+                      <p className="text-xs">
+                        {stockInSearch.trim()
+                          ? `Tidak ditemukan surat jalan dengan nomor "${stockInSearch}".`
+                          : 'Belum ada riwayat stok masuk.'}
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider bg-slate-50/50">
+                        <th className="p-3">Waktu & Tanggal</th>
+                        <th className="p-3">Supplier Vendor</th>
+                        <th className="p-3">No Surat Jalan / PO</th>
+                        <th className="p-3">Rincian Bahan Masuk</th>
+                        <th className="p-3">Penerima</th>
+                        <th className="p-3 text-right">Nilai Pembelian (IDR)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {filteredLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3 font-mono text-slate-600">
+                            {new Date(log.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })} • {new Date(log.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                          </td>
+                          <td className="p-3 font-bold text-slate-900 flex items-center gap-1.5">
+                            <Building2 size={14} className="text-slate-400" />
+                            <span>{log.supplierName}</span>
+                          </td>
+                          <td className="p-3 font-mono font-semibold text-indigo-700 bg-indigo-50/40 rounded-lg">
+                            {log.invoiceNo}
+                          </td>
+                          <td className="p-3 text-slate-700">
+                            <div className="flex flex-wrap gap-1">
+                              {log.items.map((it, i) => (
+                                <span key={i} className="bg-slate-100 px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-800">
+                                  {it.materialName}: <strong>+{it.qty} {it.unit}</strong>
+                                </span>
+                              ))}
+                            </div>
+                            {log.notes && <p className="text-[10px] text-slate-400 italic mt-0.5">"{log.notes}"</p>}
+                          </td>
+                          <td className="p-3 text-slate-600 font-semibold">{log.receivedBy}</td>
+                          <td className="p-3 text-right font-mono font-black text-slate-900">
+                            Rp {log.totalAmount.toLocaleString('id-ID')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
           </div>
 
