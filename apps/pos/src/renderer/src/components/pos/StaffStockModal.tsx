@@ -57,6 +57,7 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
       setActiveTab(initialTab || 'request');
       setSelectedDOId(null);
       setShowDirectStockIn(false);
+      setReqItems([]);
     }
   }, [isOpen, initialTab]);
 
@@ -64,10 +65,7 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
   // 1. STATE FORM MENU 1: REQUEST STOK KE OWNER
   // ==========================================
   const [reqUrgency, setReqUrgency] = useState<StockRequestUrgency>('NORMAL');
-  const [reqNotes, setReqNotes] = useState('');
-  const [reqItems, setReqItems] = useState<{ materialId: string; qtyRequested: number }[]>([
-    { materialId: materials[0]?.id || 'mat_1', qtyRequested: 5 }
-  ]);
+  const [reqItems, setReqItems] = useState<{ materialId: string; qtyRequested: number }[]>([]);
 
   // ==========================================
   // 2. STATE FORM MENU 2: STOK MASUK (BERBASIS DO & INPUT BEBAS)
@@ -108,7 +106,8 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
   // HANDLERS: MENU 1 (REQUEST STOK)
   // ------------------------------------------
   const handleAddReqItem = () => {
-    setReqItems(prev => [...prev, { materialId: materials[0]?.id || 'mat_1', qtyRequested: 5 }]);
+    const defaultMat = materials[0]?.id || 'mat_1';
+    setReqItems(prev => [...prev, { materialId: defaultMat, qtyRequested: 1 }]);
   };
 
   const handleRemoveReqItem = (idx: number) => {
@@ -117,6 +116,11 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
 
   const handleSubmitRequest = (e: React.FormEvent) => {
     e.preventDefault();
+    if (reqItems.length === 0) {
+      showToast('⚠️ Tambahkan minimal 1 bahan yang ingin dipesan ke Owner.');
+      return;
+    }
+
     const hasInvalid = reqItems.some(i => i.qtyRequested <= 0);
     if (hasInvalid) {
       showToast('⚠️ Jumlah pesanan bahan harus lebih dari 0.');
@@ -126,12 +130,11 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
     createStockRequest({
       requestedBy: user?.name || 'Staff Kasir/Barista',
       urgency: reqUrgency,
-      notes: reqNotes,
+      notes: '',
       items: reqItems,
     });
 
-    setReqNotes('');
-    setReqItems([{ materialId: materials[0]?.id || 'mat_1', qtyRequested: 5 }]);
+    setReqItems([]);
     showToast('🚀 Permintaan stok berhasil dikirim ke Owner!');
   };
 
@@ -395,80 +398,83 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                     <button
                       type="button"
                       onClick={handleAddReqItem}
-                      className="flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-100/80 hover:bg-indigo-100 px-2.5 py-1 rounded-xl border border-indigo-200 transition-colors"
+                      className="flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-100/80 hover:bg-indigo-100 px-2.5 py-1 rounded-xl border border-indigo-200 transition-colors cursor-pointer"
                     >
                       <Plus size={13} /> Tambah Bahan
                     </button>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {reqItems.map((item, idx) => {
-                      const selectedMat = materials.find(m => m.id === item.materialId) || materials[0];
-                      const estStock = Number((selectedMat?.startStock + selectedMat?.stockIn - selectedMat?.usedSystem).toFixed(2));
+                  {reqItems.length === 0 ? (
+                    <div className="text-center py-6 px-4 bg-white/70 border border-dashed border-indigo-200 rounded-2xl flex flex-col items-center justify-center gap-2">
+                      <Package size={26} className="text-indigo-400 opacity-60" />
+                      <p className="text-slate-500 text-xs font-medium">
+                        Daftar pesanan masih kosong. Tambahkan bahan baku yang ingin diajukan.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleAddReqItem}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-xs transition-all cursor-pointer"
+                      >
+                        <Plus size={14} /> + Tambah Bahan yang Ingin Dipesan
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {reqItems.map((item, idx) => {
+                        const selectedMat = materials.find(m => m.id === item.materialId) || materials[0];
+                        const estStock = Number((selectedMat?.startStock + selectedMat?.stockIn - selectedMat?.usedSystem).toFixed(2));
 
-                      return (
-                        <div key={idx} className="flex items-center gap-2 p-2.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
-                          <div className="flex-1">
-                            <select
-                              value={item.materialId}
-                              onChange={(e) => {
-                                const newId = e.target.value;
-                                setReqItems(prev => prev.map((it, i) => i === idx ? { ...it, materialId: newId } : it));
-                              }}
-                              className="w-full text-xs font-bold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white outline-none"
-                            >
-                              {materials.map((m) => {
-                                const sisa = Number((m.startStock + m.stockIn - m.usedSystem).toFixed(2));
-                                return (
-                                  <option key={m.id} value={m.id}>
-                                    {m.name} (Sisa di bar: ~{sisa} {m.unit})
-                                  </option>
-                                );
-                              })}
-                            </select>
-                          </div>
+                        return (
+                          <div key={idx} className="flex items-center gap-2 p-2.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
+                            <div className="flex-1">
+                              <select
+                                value={item.materialId}
+                                onChange={(e) => {
+                                  const newId = e.target.value;
+                                  setReqItems(prev => prev.map((it, i) => i === idx ? { ...it, materialId: newId } : it));
+                                }}
+                                className="w-full text-xs font-bold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white outline-none"
+                              >
+                                {materials.map((m) => {
+                                  const sisa = Number((m.startStock + m.stockIn - m.usedSystem).toFixed(2));
+                                  return (
+                                    <option key={m.id} value={m.id}>
+                                      {m.name} (Sisa di bar: ~{sisa} {m.unit})
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
 
-                          <div className="w-32 flex items-center gap-1.5">
-                            <input
-                              type="number"
-                              min="0.1"
-                              step="0.1"
-                              value={item.qtyRequested}
-                              onChange={(e) => {
-                                const val = parseFloat(e.target.value) || 0;
-                                setReqItems(prev => prev.map((it, i) => i === idx ? { ...it, qtyRequested: val } : it));
-                              }}
-                              className="w-full text-xs font-mono font-black p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-center focus:bg-white outline-none"
-                              placeholder="Qty"
-                            />
-                            <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">{selectedMat?.unit}</span>
-                          </div>
+                            <div className="w-32 flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                min="0.1"
+                                step="0.1"
+                                value={item.qtyRequested}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  setReqItems(prev => prev.map((it, i) => i === idx ? { ...it, qtyRequested: val } : it));
+                                }}
+                                className="w-full text-xs font-mono font-black p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-center focus:bg-white outline-none"
+                                placeholder="Qty"
+                              />
+                              <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">{selectedMat?.unit}</span>
+                            </div>
 
-                          {reqItems.length > 1 && (
                             <button
                               type="button"
                               onClick={() => handleRemoveReqItem(idx)}
-                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus bahan ini dari daftar"
                             >
                               <Trash2 size={15} />
                             </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Catatan Staff */}
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Catatan Kebutuhan Staff:</label>
-                  <textarea
-                    rows={2}
-                    value={reqNotes}
-                    onChange={(e) => setReqNotes(e.target.value)}
-                    placeholder="Contoh: Fresh milk sisa 3 liter, weekend estimasi ramai pelanggan..."
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-2xl text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                  />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-1">
