@@ -21,7 +21,9 @@ import {
   ShoppingBag,
   ArrowRight,
   PlayCircle,
-  Package
+  Package,
+  Menu,
+  ChevronRight
 } from 'lucide-react';
 import MenuGrid from '../components/pos/MenuGrid';
 import OrderPanel from '../components/pos/OrderPanel';
@@ -48,6 +50,7 @@ export default function CashierPage() {
   const [selectedProductForMod, setSelectedProductForMod] = useState<ProductItem | null>(null);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isTabletCartOpen, setIsTabletCartOpen] = useState(false);
+  const [isHamburgerOpen, setIsHamburgerOpen] = useState(false);
   const [paymentResultToast, setPaymentResultToast] = useState<PaymentSuccessResult | null>(null);
   const [scannedToast, setScannedToast] = useState<string | null>(null);
   
@@ -234,7 +237,7 @@ export default function CashierPage() {
         </div>
 
         {/* Navigation & Status Center/Right */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           
           {/* LAN & Cloud Sync Status */}
           <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/80 rounded-lg text-[11px] font-medium text-emerald-400 border border-slate-700">
@@ -263,122 +266,6 @@ export default function CashierPage() {
             )}
           </button>
 
-          {/* Quick Info Modal Trigger - ONLY VISIBLE TO MANAGER */}
-          {isManager && (
-            <button
-              type="button"
-              onClick={() => setShowArchInfo(true)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-cyan-950/60 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 transition-colors"
-              title="Penjelasan Pemisahan Sistem (Khusus Manager)"
-            >
-              <Info className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden xl:inline">Struktur Sistem</span>
-            </button>
-          )}
-
-          <div className="h-5 w-[1px] bg-slate-700 mx-0.5" />
-
-          {/* 1. TOMBOL START SHIFT / END SHIFT (PROMINENT ACTION BUTTON) */}
-          <button
-            type="button"
-            onClick={() => navigate('/shift')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all shadow-xs active:scale-95 ${
-              activeShift 
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 hover:border-rose-400' 
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/40 animate-pulse'
-            }`}
-            title={activeShift ? "Klik untuk Tutup Shift (End Shift) & Cetak Z-Report" : "Klik untuk Buka Shift Kasir Baru (Start Shift)"}
-          >
-            {activeShift ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping"></span>
-                <span>🔴 Tutup Shift (End Shift)</span>
-              </>
-            ) : (
-              <>
-                <Clock className="w-3.5 h-3.5" />
-                <span>🟢 + Buka Shift (Start Shift)</span>
-              </>
-            )}
-          </button>
-
-          {/* 2. TOMBOL STOK & REQUEST BAHAN (STAFF / BARISTA) */}
-          <button
-            type="button"
-            onClick={() => setShowStaffStockModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-950/80 text-indigo-200 border border-indigo-500/40 hover:bg-indigo-900 hover:text-white transition-all shadow-xs active:scale-95"
-            title="Catat Stok Masuk & Ajukan Request Stok ke Owner"
-          >
-            <Package className="w-4 h-4 text-indigo-400" />
-            <span className="hidden sm:inline">📦 Stok & Request</span>
-          </button>
-
-          {/* 3. KDS Barista Display */}
-          <button
-            type="button"
-            onClick={() => navigate('/kitchen')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <ChefHat className="w-4 h-4 text-amber-400" />
-            <span className="hidden md:inline">KDS Barista</span>
-          </button>
-
-          {/* 3. Laporan Owner (KHUSUS MANAGER / ADMIN) */}
-          {isManager && (
-            <button
-              type="button"
-              onClick={() => navigate('/reports')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-950/80 text-sky-300 border border-sky-500/40 hover:bg-sky-900 transition-colors shadow-sm"
-              title="Akses Laporan Penjualan Owner"
-            >
-              <BarChart3 className="w-4 h-4 text-sky-400" />
-              <span className="hidden md:inline">Laporan Owner</span>
-            </button>
-          )}
-
-          {/* 4. Pengaturan Outlet (KHUSUS MANAGER / ADMIN) */}
-          {isManager && (
-            <button
-              type="button"
-              onClick={() => navigate('/settings')}
-              className="p-1.5 rounded-lg bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700 transition-colors"
-              title="Pengaturan Toko & Menu"
-            >
-              <Settings className="w-4 h-4 text-amber-400" />
-            </button>
-          )}
-
-          <div className="h-5 w-[1px] bg-slate-700 mx-0.5" />
-
-          {/* Quick Cash Drawer Kick */}
-          <button
-            type="button"
-            onClick={async () => {
-              const ok = await openCashDrawer();
-              if (ok) {
-                setScannedToast('💵 Sinyal Terkirim: Laci Kas Terbuka!');
-              } else {
-                setScannedToast('⚠️ Laci Gagal Terbuka: Printer kasir offline atau kabel RJ11 terlepas.');
-              }
-              setTimeout(() => setScannedToast(null), 3500);
-            }}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-emerald-400 hover:bg-slate-800 transition-colors"
-            title="Dorong Buka Laci Kas (Cash Drawer)"
-          >
-            <Store className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden xl:inline">Laci Kas</span>
-          </button>
-
-          {/* Kiosk Fullscreen Toggle */}
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="p-1.5 rounded-lg text-slate-300 hover:text-cyan-400 hover:bg-slate-800 transition-colors"
-            title={isFullscreen ? 'Keluar Mode Layar Penuh Kiosk' : 'Masuk Mode Layar Penuh Kiosk (F11)'}
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4 text-cyan-400" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-
           {/* Tablet Cart Quick Button (< lg screens) */}
           <button
             type="button"
@@ -392,20 +279,19 @@ export default function CashierPage() {
 
           <div className="h-5 w-[1px] bg-slate-700 mx-0.5" />
 
-          {/* User Profile & Logout */}
-          <div className="flex items-center gap-2 pl-1">
-            <div className="w-7 h-7 rounded-full bg-[#e94560]/20 border border-[#e94560]/40 flex items-center justify-center text-xs font-bold text-[#e94560]">
-              {user?.name ? user.name[0] : 'K'}
-            </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-slate-300 hover:text-red-400 hover:bg-slate-800 transition-colors"
-              title="Kunci Layar / Ganti Staff"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Kunci</span>
-            </button>
-          </div>
+          {/* HAMBURGER MENU BUTTON */}
+          <button
+            type="button"
+            onClick={() => setIsHamburgerOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 hover:border-slate-500 transition-all shadow-sm active:scale-95 cursor-pointer"
+            title="Buka Menu & Navigasi Kasir"
+          >
+            <Menu className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-bold">Menu</span>
+            {(!activeShift || !printerStatus.connected) && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping ml-0.5" />
+            )}
+          </button>
 
         </div>
 
@@ -789,6 +675,337 @@ export default function CashierPage() {
         isOpen={showStaffStockModal}
         onClose={() => setShowStaffStockModal(false)}
       />
+
+      {/* SLIDE-OVER HAMBURGER DRAWER */}
+      {isHamburgerOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex justify-end animate-fade-in select-none">
+          {/* Click outside backdrop to close */}
+          <div className="absolute inset-0" onClick={() => setIsHamburgerOpen(false)} />
+          
+          <div className="relative w-full max-w-sm sm:max-w-md h-full bg-[#161622] text-white border-l border-slate-800 shadow-2xl flex flex-col justify-between overflow-hidden z-10">
+            
+            {/* Top Header of Drawer */}
+            <div className="p-5 border-b border-slate-800/80 bg-[#1a1a2e]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#e94560] to-rose-400 flex items-center justify-center font-black text-white text-lg shadow-md shadow-[#e94560]/30">
+                    ☕
+                  </div>
+                  <div>
+                    <h2 className="font-black text-base text-white tracking-tight">Kopi Nusa Senopati</h2>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[10px] bg-slate-800 text-emerald-400 font-mono px-1.5 py-0.5 rounded border border-slate-700">
+                        REG-01
+                      </span>
+                      <span className="text-[11px] text-slate-300 font-semibold">
+                        Staff: {user?.name || 'Kasir'}
+                      </span>
+                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                        isManager 
+                          ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40' 
+                          : 'bg-slate-800 text-slate-300 border border-slate-700'
+                      }`}>
+                        {isManager ? '👑 MANAGER' : 'KASIR'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsHamburgerOpen(false)}
+                  className="w-8 h-8 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-all border border-slate-700"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Shift Card inside Drawer */}
+              <div className="mt-4 p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Status Shift Kasir</span>
+                  <span className={`text-xs font-bold flex items-center gap-1.5 mt-0.5 ${
+                    activeShift ? 'text-emerald-400' : 'text-amber-400 animate-pulse'
+                  }`}>
+                    {activeShift ? (
+                      <>🟢 Shift Aktif ({activeShift.openedAt})</>
+                    ) : (
+                      <>🟡 Shift Belum Dibuka</>
+                    )}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHamburgerOpen(false);
+                    navigate('/shift');
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs font-black transition-all shadow-xs active:scale-95 flex items-center gap-1.5 ${
+                    activeShift 
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30' 
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/40'
+                  }`}
+                >
+                  {activeShift ? (
+                    <>🔴 Tutup Shift</>
+                  ) : (
+                    <>🟢 Buka Shift</>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Menu List Sections (Scrollable) */}
+            <div className="flex-1 p-5 space-y-6 overflow-y-auto">
+              
+              {/* Section 1: Operasional Kasir */}
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
+                  Operasional Kasir & Toko
+                </p>
+                <div className="space-y-1.5">
+                  {/* Stok Masuk & Request Staff */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHamburgerOpen(false);
+                      setShowStaffStockModal(true);
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 group-hover:scale-105 transition-transform">
+                        <Package className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs">Stok Masuk & Request Bahan</div>
+                        <div className="text-[11px] text-slate-400">Penerimaan barang & request stok ke owner</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  </button>
+
+                  {/* KDS Kitchen Display */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHamburgerOpen(false);
+                      navigate('/kitchen');
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 group-hover:scale-105 transition-transform">
+                        <ChefHat className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs">KDS Barista / Dapur</div>
+                        <div className="text-[11px] text-slate-400">Antrean pesanan kitchen display bar</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  </button>
+
+                  {/* Buka Laci Kas */}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await openCashDrawer();
+                      if (ok) {
+                        setScannedToast('💵 Sinyal Terkirim: Laci Kas Terbuka!');
+                      } else {
+                        setScannedToast('⚠️ Laci Gagal Terbuka: Printer offline atau kabel RJ11 terlepas.');
+                      }
+                      setTimeout(() => setScannedToast(null), 3500);
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 group-hover:scale-105 transition-transform">
+                        <Store className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs">Buka Laci Kas (Cash Drawer)</div>
+                        <div className="text-[11px] text-slate-400">Trigger pulsa elektrik RJ11 printer</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
+                      Kick RJ11
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 2: Manajemen & Owner */}
+              <div>
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                    Manajemen & Owner
+                  </p>
+                  <span className="text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> PIN Manager
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {/* Laporan Owner */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHamburgerOpen(false);
+                      handleGuardedNav('/reports');
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-500/30 group-hover:scale-105 transition-transform">
+                        <BarChart3 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs flex items-center gap-1.5">
+                          <span>Laporan Penjualan & Owner</span>
+                          <span className="text-[9px] bg-sky-500/20 text-sky-300 px-1.5 py-0.2 rounded font-bold">4 Tab</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400">Grafik omset, stok masuk, stock taking, laba rugi</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  </button>
+
+                  {/* Pengaturan Toko */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHamburgerOpen(false);
+                      handleGuardedNav('/settings');
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30 group-hover:scale-105 transition-transform">
+                        <Settings className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs">Pengaturan Toko & Menu</div>
+                        <div className="text-[11px] text-slate-400">Konfigurasi outlet, menu, staf & pajak</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  </button>
+
+                  {/* Struktur Sistem Info */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHamburgerOpen(false);
+                      setShowArchInfo(true);
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30 group-hover:scale-105 transition-transform">
+                        <Info className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs">Struktur & Pemisahan Sistem</div>
+                        <div className="text-[11px] text-slate-400">Arsitektur SaaS Vendor vs POS Toko vs Owner</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 3: Perangkat & Layar */}
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
+                  Perangkat & Layar
+                </p>
+                <div className="space-y-1.5">
+                  {/* Diagnostik Printer */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHamburgerOpen(false);
+                      setShowPrinterModal(true);
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${
+                        printerStatus.connected 
+                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
+                          : 'bg-red-500/20 text-red-400 border-red-500/30'
+                      }`}>
+                        <Printer className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs flex items-center gap-2">
+                          <span>Diagnostik Printer Thermal</span>
+                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                            printerStatus.connected 
+                              ? 'bg-emerald-500/20 text-emerald-300' 
+                              : 'bg-red-500/20 text-red-300'
+                          }`}>
+                            {printerStatus.connected ? 'Online' : 'Offline'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400">Tes potong kertas & IP printer thermal</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  </button>
+
+                  {/* Kiosk Mode Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleFullscreen();
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-slate-700/50 text-cyan-400 flex items-center justify-center border border-slate-600/50 group-hover:scale-105 transition-transform">
+                        {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs">
+                          {isFullscreen ? 'Keluar Mode Layar Penuh Kiosk' : 'Mode Layar Penuh Kiosk'}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Maksimalkan layar terminal POS tanpa gangguan OS</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">F11</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="p-5 border-t border-slate-800 bg-[#14141f] space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsHamburgerOpen(false);
+                  handleLogout();
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-500/40 font-bold text-xs transition-all active:scale-98 shadow-sm cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Kunci Layar Kasir / Ganti Staff</span>
+              </button>
+
+              <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
+                <span>KopiPOS Terminal v1.2.0</span>
+                <span className="flex items-center gap-1 text-emerald-400 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Offline-First Engine
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
