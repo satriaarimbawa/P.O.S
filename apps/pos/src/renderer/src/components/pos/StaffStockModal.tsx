@@ -15,7 +15,10 @@ import {
   Info,
   Scale,
   Calendar,
-  Search
+  Search,
+  ArrowLeft,
+  PackageCheck,
+  ChevronRight
 } from 'lucide-react';
 import { 
   useInventoryStore, 
@@ -52,6 +55,8 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab || 'request');
+      setSelectedDOId(null);
+      setShowDirectStockIn(false);
     }
   }, [isOpen, initialTab]);
 
@@ -65,10 +70,14 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
   ]);
 
   // ==========================================
-  // 2. STATE FORM MENU 2: STOK MASUK (PENERIMAAN BARANG)
+  // 2. STATE FORM MENU 2: STOK MASUK (BERBASIS DO & INPUT BEBAS)
   // ==========================================
-  const [inInvoice, setInInvoice] = useState('');
+  const [selectedDOId, setSelectedDOId] = useState<string | null>(null);
+  const [doReceivedCounts, setDoReceivedCounts] = useState<{ [materialId: string]: string }>({});
+  const [doSearch, setDoSearch] = useState('');
   const [stockInSearch, setStockInSearch] = useState('');
+  const [showDirectStockIn, setShowDirectStockIn] = useState(false);
+  const [inInvoice, setInInvoice] = useState('');
   const [inItems, setInItems] = useState<{ materialId: string; qty: number }[]>([
     { materialId: materials[0]?.id || 'mat_1', qty: 5 }
   ]);
@@ -127,8 +136,51 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
   };
 
   // ------------------------------------------
-  // HANDLERS: MENU 2 (STOK MASUK)
+  // HANDLERS: MENU 2 (STOK MASUK: DO & DIRECT)
   // ------------------------------------------
+  const handleSelectDO = (requestId: string) => {
+    const req = stockRequests.find(r => r.id === requestId);
+    if (!req) return;
+    setSelectedDOId(requestId);
+    setShowDirectStockIn(false);
+    const initialCounts: { [materialId: string]: string } = {};
+    req.items.forEach(item => {
+      initialCounts[item.materialId] = String(item.qtyRequested);
+    });
+    setDoReceivedCounts(initialCounts);
+  };
+
+  const handleDOItemCountChange = (materialId: string, val: string) => {
+    setDoReceivedCounts(prev => ({ ...prev, [materialId]: val }));
+  };
+
+  const handleConfirmReceiveDO = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDOId) return;
+    const currentRequest = stockRequests.find(r => r.id === selectedDOId);
+    if (!currentRequest) return;
+
+    const verifiedItems = currentRequest.items.map(item => {
+      const rawVal = parseFloat(doReceivedCounts[item.materialId] || '0');
+      const qty = isNaN(rawVal) ? 0 : Math.max(0, rawVal);
+      return {
+        materialId: item.materialId,
+        qty,
+      };
+    });
+
+    const hasInvalid = verifiedItems.some(i => i.qty <= 0);
+    if (hasInvalid) {
+      showToast('⚠️ Jumlah fisik barang yang diterima harus lebih dari 0.');
+      return;
+    }
+
+    const doNo = currentRequest.doNumber || `DO-${currentRequest.id.slice(-4)}`;
+    fulfillStockRequest(selectedDOId, user?.name || 'Staff Toko', verifiedItems, doNo);
+    setSelectedDOId(null);
+    showToast(`🎉 Surat Jalan ${doNo} berhasil diterima & stok toko langsung bertambah!`);
+  };
+
   const handleAddInItem = () => {
     setInItems(prev => [...prev, { materialId: materials[0]?.id || 'mat_1', qty: 5 }]);
   };
@@ -155,6 +207,7 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
 
     setInInvoice('');
     setInItems([{ materialId: materials[0]?.id || 'mat_1', qty: 5 }]);
+    setShowDirectStockIn(false);
     showToast('✅ Stok masuk berhasil disimpan & stok aktif langsung bertambah!');
   };
 
@@ -511,205 +564,477 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
           )}
 
           {/* ====================================================== */}
-          {/* MENU 2: STOK MASUK (PENERIMAAN BARANG DATANG)         */}
+          {/* MENU 2: STOK MASUK (BERBASIS DO & INPUT BEBAS)        */}
           {/* ====================================================== */}
           {activeTab === 'stock-in' && (
             <div className="space-y-6">
               
-              {/* Form Input Barang Masuk Sederhana */}
-              <form onSubmit={handleSubmitStockIn} className="space-y-4 text-xs bg-emerald-50/40 p-4 sm:p-5 rounded-3xl border border-emerald-100">
-                <div className="flex items-start justify-between gap-2 border-b border-emerald-100 pb-3">
-                  <div>
-                    <h3 className="font-black text-sm text-emerald-950 flex items-center gap-1.5">
-                      <Truck size={16} className="text-emerald-600" />
-                      <span>Pencatatan Barang Masuk (Stok Masuk)</span>
-                    </h3>
-                    <p className="text-[11px] text-emerald-800/80 mt-0.5">
-                      Catat kiriman bahan baku yang datang. <strong>Cukup masukkan No. Surat Jalan dan jumlah fisik barang.</strong>
-                    </p>
+              {/* SUB-VIEW A: FORM VERIFIKASI & PENERIMAAN DO TERPILIH */}
+              {selectedDOId ? (() => {
+                const currentRequest = stockRequests.find(r => r.id === selectedDOId);
+                if (!currentRequest) return null;
+                const doNo = currentRequest.doNumber || `DO-${currentRequest.id.slice(-4)}`;
+
+                return (
+                  <div className="space-y-5 animate-fade-in">
+                    {/* Header Navigasi Kembali */}
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDOId(null)}
+                        className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+                      >
+                        <ArrowLeft size={15} />
+                        <span>Kembali ke Daftar Surat Jalan</span>
+                      </button>
+
+                      <span className="text-xs bg-emerald-100 text-emerald-950 font-mono font-black px-3 py-1.5 rounded-xl border border-emerald-300">
+                        📄 Surat Jalan: {doNo}
+                      </span>
+                    </div>
+
+                    {/* Form Input Qty Fisik DO */}
+                    <form onSubmit={handleConfirmReceiveDO} className="space-y-4 bg-emerald-50/50 p-4 sm:p-5 rounded-3xl border border-emerald-200 shadow-xs">
+                      <div className="flex items-start justify-between gap-2 border-b border-emerald-100 pb-3">
+                        <div>
+                          <h3 className="font-black text-sm text-emerald-950 flex items-center gap-1.5">
+                            <PackageCheck size={18} className="text-emerald-600" />
+                            <span>Pemeriksaan & Verifikasi Fisik Barang Datang</span>
+                          </h3>
+                          <p className="text-[11px] text-emerald-800/80 mt-0.5">
+                            Periksa fisik barang dari Surat Jalan <strong>{doNo}</strong>. Masukkan jumlah riil yang diterima di bar.
+                          </p>
+                        </div>
+                        <span className="text-[10px] bg-emerald-200/80 text-emerald-900 font-bold px-2.5 py-0.5 rounded-lg shrink-0">
+                          🚚 In-Transit DO
+                        </span>
+                      </div>
+
+                      {/* Info DO Metadata */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs bg-white p-3.5 rounded-2xl border border-slate-200">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-medium block">Nomor DO / SJ:</span>
+                          <strong className="font-mono text-slate-900">{doNo}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-medium block">Diajukan oleh:</span>
+                          <strong className="text-slate-800">{currentRequest.requestedBy}</strong>
+                        </div>
+                        <div className="col-span-2 sm:col-span-1">
+                          <span className="text-[10px] text-slate-400 font-medium block">Petugas Penerima:</span>
+                          <strong className="text-emerald-700">{user?.name || 'Staff Toko'}</strong>
+                        </div>
+                      </div>
+
+                      {/* Daftar Barang Dalam DO & Input Qty Fisik */}
+                      <div className="space-y-2">
+                        <label className="block font-bold text-slate-700 text-xs">
+                          Daftar Barang & Input Hitungan Fisik Aktual:
+                        </label>
+
+                        <div className="space-y-2.5">
+                          {currentRequest.items.map((item) => {
+                            const currentVal = doReceivedCounts[item.materialId] !== undefined
+                              ? doReceivedCounts[item.materialId]
+                              : String(item.qtyRequested);
+
+                            return (
+                              <div
+                                key={item.materialId}
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:border-emerald-300 transition-colors"
+                              >
+                                <div className="flex-1">
+                                  <div className="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
+                                    <Package size={16} className="text-emerald-600" />
+                                    <span>{item.materialName}</span>
+                                  </div>
+                                  <span className="text-[11px] text-slate-400 font-medium">
+                                    Pesanan Sistem: <strong className="text-slate-700 font-mono">{item.qtyRequested} {item.unit}</strong>
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-bold text-slate-600">Qty Fisik Datang:</span>
+                                  <div className="w-36 flex items-center gap-1.5">
+                                    <input
+                                      type="number"
+                                      min="0.1"
+                                      step="0.1"
+                                      value={currentVal}
+                                      onChange={(e) => handleDOItemCountChange(item.materialId, e.target.value)}
+                                      className="w-full text-xs font-mono font-black p-2 bg-slate-50 border-2 border-emerald-400 focus:border-emerald-600 rounded-xl text-slate-900 text-center focus:bg-white outline-none"
+                                      placeholder="Qty"
+                                    />
+                                    <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">{item.unit}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDOId(null)}
+                          className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl transition-all cursor-pointer text-center"
+                        >
+                          Batal
+                        </button>
+
+                        <button
+                          type="submit"
+                          className="flex-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <Check size={16} />
+                          <span>Konfirmasi Penerimaan DO ({doNo})</span>
+                        </button>
+                      </div>
+                    </form>
                   </div>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-lg border border-emerald-200 shrink-0">
-                    Auto-Restock
-                  </span>
-                </div>
+                );
+              })() : (() => {
+                const activeDOs = stockRequests.filter(r => r.status === 'ORDERED');
+                const filteredDOs = activeDOs.filter(r => {
+                  const query = doSearch.trim().toLowerCase();
+                  if (!query) return true;
+                  const doNo = (r.doNumber || `DO-${r.id.slice(-4)}`).toLowerCase();
+                  const itemsMatch = r.items.some(i => i.materialName.toLowerCase().includes(query));
+                  return doNo.includes(query) || itemsMatch;
+                });
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Nomor Surat Jalan / Bukti Kirim:</label>
-                  <input
-                    type="text"
-                    value={inInvoice}
-                    onChange={(e) => setInInvoice(e.target.value)}
-                    placeholder="Contoh: SJ-2026/09/01 (Opsional, otomatis dibuat jika kosong)"
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none text-slate-900"
-                  />
-                </div>
+                return (
+                  <div className="space-y-6">
+                    
+                    {/* Top Action Bar & Toggle Direct Inbound */}
+                    <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-slate-100 p-4 sm:p-5 rounded-3xl border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                          <Truck size={18} className="text-emerald-600" />
+                          <span>Penerimaan Barang Masuk (Stok Masuk)</span>
+                        </h3>
+                        <p className="text-[11px] text-slate-600 mt-0.5">
+                          Klik nomor Surat Jalan (DO) yang datang untuk verifikasi fisik, atau gunakan input bebas jika tanpa DO.
+                        </p>
+                      </div>
 
-                {/* Item Bahan Masuk */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="font-bold text-slate-700">Jumlah Bahan Fisik yang Diterima:</label>
-                    <button
-                      type="button"
-                      onClick={handleAddInItem}
-                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-100/80 hover:bg-emerald-100 px-2.5 py-1 rounded-xl border border-emerald-200 transition-colors cursor-pointer"
-                    >
-                      <Plus size={13} /> Tambah Bahan
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowDirectStockIn(!showDirectStockIn)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer ${
+                          showDirectStockIn
+                            ? 'bg-slate-800 text-white hover:bg-slate-900'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20'
+                        }`}
+                      >
+                        {showDirectStockIn ? (
+                          <>
+                            <Package size={14} />
+                            <span>Tutup Form Input Bebas</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={14} />
+                            <span>Input Non-DO / Belanja Bebas</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
 
-                  <div className="space-y-2.5">
-                    {inItems.map((item, idx) => {
-                      const selectedMat = materials.find(m => m.id === item.materialId) || materials[0];
-
-                      return (
-                        <div key={idx} className="flex items-center gap-2 p-2.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
-                          <div className="flex-1">
-                            <select
-                              value={item.materialId}
-                              onChange={(e) => {
-                                const newId = e.target.value;
-                                setInItems(prev => prev.map((it, i) => i === idx ? { ...it, materialId: newId } : it));
-                              }}
-                              className="w-full text-xs font-bold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white outline-none"
-                            >
-                              {materials.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.name} ({m.unit})
-                                </option>
-                              ))}
-                            </select>
+                    {/* Form Input Non-DO Bebas (Jika di-toggle) */}
+                    {showDirectStockIn && (
+                      <form onSubmit={handleSubmitStockIn} className="space-y-4 text-xs bg-emerald-50/40 p-4 sm:p-5 rounded-3xl border border-emerald-200 animate-fade-in">
+                        <div className="flex items-start justify-between gap-2 border-b border-emerald-100 pb-3">
+                          <div>
+                            <h3 className="font-black text-sm text-emerald-950 flex items-center gap-1.5">
+                              <Plus size={16} className="text-emerald-600" />
+                              <span>Formulir Penerimaan Non-DO / Belanja Dadakan</span>
+                            </h3>
+                            <p className="text-[11px] text-emerald-800/80 mt-0.5">
+                              Untuk kiriman langsung tanpa pesanan sistem DO (misal: belanja di warung/pasar terdekat).
+                            </p>
                           </div>
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-lg border border-emerald-200 shrink-0">
+                            Direct Inbound
+                          </span>
+                        </div>
 
-                          <div className="w-36 flex items-center gap-1.5">
-                            <input
-                              type="number"
-                              min="0.1"
-                              step="0.1"
-                              value={item.qty}
-                              onChange={(e) => {
-                                const val = parseFloat(e.target.value) || 0;
-                                setInItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: val } : it));
-                              }}
-                              className="w-full text-xs font-mono font-black p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-center focus:bg-white outline-none"
-                              placeholder="Qty Masuk"
-                            />
-                            <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">{selectedMat?.unit}</span>
-                          </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Nomor Surat Jalan / Nota Toko:</label>
+                          <input
+                            type="text"
+                            value={inInvoice}
+                            onChange={(e) => setInInvoice(e.target.value)}
+                            placeholder="Contoh: NOTA-PASAR-01 (Opsional, otomatis dibuat jika kosong)"
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none text-slate-900"
+                          />
+                        </div>
 
-                          {inItems.length > 1 && (
+                        {/* Item Bahan Masuk */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="font-bold text-slate-700">Jumlah Bahan Fisik yang Diterima:</label>
                             <button
                               type="button"
-                              onClick={() => handleRemoveInItem(idx)}
-                              className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              onClick={handleAddInItem}
+                              className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-100/80 hover:bg-emerald-100 px-2.5 py-1 rounded-xl border border-emerald-200 transition-colors cursor-pointer"
                             >
-                              <Trash2 size={15} />
+                              <Plus size={13} /> Tambah Bahan
+                            </button>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            {inItems.map((item, idx) => {
+                              const selectedMat = materials.find(m => m.id === item.materialId) || materials[0];
+
+                              return (
+                                <div key={idx} className="flex items-center gap-2 p-2.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
+                                  <div className="flex-1">
+                                    <select
+                                      value={item.materialId}
+                                      onChange={(e) => {
+                                        const newId = e.target.value;
+                                        setInItems(prev => prev.map((it, i) => i === idx ? { ...it, materialId: newId } : it));
+                                      }}
+                                      className="w-full text-xs font-bold p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white outline-none"
+                                    >
+                                      {materials.map((m) => (
+                                        <option key={m.id} value={m.id}>
+                                          {m.name} ({m.unit})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  <div className="w-36 flex items-center gap-1.5">
+                                    <input
+                                      type="number"
+                                      min="0.1"
+                                      step="0.1"
+                                      value={item.qty}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        setInItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: val } : it));
+                                      }}
+                                      className="w-full text-xs font-mono font-black p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-center focus:bg-white outline-none"
+                                      placeholder="Qty Masuk"
+                                    />
+                                    <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">{selectedMat?.unit}</span>
+                                  </div>
+
+                                  {inItems.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveInItem(idx)}
+                                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="pt-1">
+                          <button
+                            type="submit"
+                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Check size={16} />
+                            <span>Simpan & Tambah ke Stok Aktif Toko</span>
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* Section 1: Daftar Surat Jalan / DO Aktif (Sedang Dikirim) */}
+                    <div className="space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
+                        <div>
+                          <span className="font-black text-xs text-slate-800 flex items-center gap-1.5">
+                            <PackageCheck size={16} className="text-emerald-600" />
+                            <span>Surat Jalan / Delivery Order (DO) Siap Diterima</span>
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {activeDOs.length} Surat Jalan aktif sedang dikirim
+                          </span>
+                        </div>
+
+                        {/* Search bar DO */}
+                        <div className="relative w-full sm:w-60">
+                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            value={doSearch}
+                            onChange={(e) => setDoSearch(e.target.value)}
+                            placeholder="Cari No DO / Nama Bahan..."
+                            className="w-full pl-8 pr-7 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl text-xs font-mono outline-none transition-all placeholder:font-sans"
+                          />
+                          {doSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setDoSearch('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                            >
+                              <X size={12} />
                             </button>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="pt-1">
-                  <button
-                    type="submit"
-                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Check size={16} />
-                    <span>Simpan & Tambah ke Stok Aktif Toko</span>
-                  </button>
-                </div>
-              </form>
-
-              {/* Log Riwayat Stok Masuk dengan Fitur Pencarian By Nomor Surat Jalan */}
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
-                  <div>
-                    <span className="font-black text-xs text-slate-800 flex items-center gap-1.5">
-                      <Truck size={15} className="text-slate-500" />
-                      <span>Riwayat Penerimaan Barang Masuk (Inbound Logs)</span>
-                    </span>
-                    <span className="text-[11px] text-slate-500 font-medium">Total: {stockInLogs.length} Surat Jalan</span>
-                  </div>
-
-                  {/* Search bar No Surat Jalan */}
-                  <div className="relative w-full sm:w-60">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      value={stockInSearch}
-                      onChange={(e) => setStockInSearch(e.target.value)}
-                      placeholder="Cari No Surat Jalan..."
-                      className="w-full pl-8 pr-7 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl text-xs font-mono outline-none transition-all placeholder:font-sans"
-                    />
-                    {stockInSearch && (
-                      <button
-                        type="button"
-                        onClick={() => setStockInSearch('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {(() => {
-                  const filteredLogs = stockInLogs
-                    .slice()
-                    .reverse()
-                    .filter((log) => 
-                      log.invoiceNo.toLowerCase().includes(stockInSearch.trim().toLowerCase())
-                    );
-
-                  if (filteredLogs.length === 0) {
-                    return (
-                      <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
-                        <Truck size={32} className="mx-auto mb-2 opacity-40" />
-                        <p className="text-xs">
-                          {stockInSearch.trim() 
-                            ? `Tidak ada surat jalan dengan nomor "${stockInSearch}".`
-                            : 'Belum ada riwayat penerimaan barang masuk.'}
-                        </p>
                       </div>
-                    );
-                  }
 
-                  return (
-                    <div className="space-y-2.5">
-                      {filteredLogs.map((log) => (
-                        <div key={log.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                                <span className="text-[10px] bg-emerald-100 text-emerald-950 font-mono font-bold px-2 py-0.5 rounded-md border border-emerald-200">
-                                  No Surat Jalan: {log.invoiceNo}
-                                </span>
-                              </span>
+                      {filteredDOs.length === 0 ? (
+                        <div className="text-center py-7 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
+                          <Truck size={30} className="mx-auto mb-1.5 opacity-40" />
+                          <p className="text-xs font-bold text-slate-600">
+                            {doSearch.trim() ? `Tidak ditemukan DO dengan nomor "${doSearch}".` : 'Tidak ada Surat Jalan (DO) yang sedang dalam perjalanan.'}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Semua DO telah diterima. Gunakan tombol "Input Non-DO" jika ada kiriman belanja dadakan.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-3">
+                          {filteredDOs.map((req) => {
+                            const doNo = req.doNumber || `DO-${req.id.slice(-4)}`;
+                            return (
+                              <div
+                                key={req.id}
+                                onClick={() => handleSelectDO(req.id)}
+                                className="p-4 bg-emerald-50/50 hover:bg-emerald-50 rounded-2xl border-2 border-emerald-200 hover:border-emerald-500 transition-all cursor-pointer shadow-xs hover:shadow-md group space-y-3"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs bg-emerald-600 text-white font-mono font-black px-2.5 py-1 rounded-xl shadow-xs flex items-center gap-1.5">
+                                      <Truck size={13} />
+                                      <span>{doNo}</span>
+                                    </span>
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                      req.urgency === 'URGENT' ? 'bg-rose-100 text-rose-800' : 'bg-slate-200 text-slate-700'
+                                    }`}>
+                                      {req.urgency === 'URGENT' ? '🔴 Mendesak' : '🟢 Normal'}
+                                    </span>
+                                  </div>
+
+                                  <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                                    <span>Klik Untuk Periksa & Terima</span>
+                                    <ChevronRight size={15} />
+                                  </span>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1.5">
+                                  {req.items.map((item, idx) => (
+                                    <span key={idx} className="bg-white border border-emerald-200 px-2.5 py-1 rounded-xl text-[11px] font-bold text-slate-800">
+                                      {item.materialName}: <strong className="text-emerald-700 font-mono">+{item.qtyRequested} {item.unit}</strong>
+                                    </span>
+                                  ))}
+                                </div>
+
+                                <div className="flex items-center justify-between pt-2 border-t border-emerald-200/60 text-[10px] text-slate-500">
+                                  <span>Pengaju: <strong>{req.requestedBy}</strong> ({new Date(req.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })})</span>
+                                  <span className="text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-md">
+                                    🚚 Dipesankan Owner
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Section 2: Riwayat Penerimaan Selesai (Inbound Logs) */}
+                    <div className="space-y-3 pt-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
+                        <div>
+                          <span className="font-black text-xs text-slate-800 flex items-center gap-1.5">
+                            <ClipboardList size={15} className="text-slate-500" />
+                            <span>Riwayat Penerimaan Barang Selesai (Inbound Logs)</span>
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium">Total: {stockInLogs.length} Surat Jalan Selesai</span>
+                        </div>
+
+                        {/* Search bar Inbound Logs */}
+                        <div className="relative w-full sm:w-60">
+                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            value={stockInSearch}
+                            onChange={(e) => setStockInSearch(e.target.value)}
+                            placeholder="Cari No Surat Jalan..."
+                            className="w-full pl-8 pr-7 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl text-xs font-mono outline-none transition-all placeholder:font-sans"
+                          />
+                          {stockInSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setStockInSearch('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const filteredLogs = stockInLogs
+                          .slice()
+                          .reverse()
+                          .filter((log) => 
+                            log.invoiceNo.toLowerCase().includes(stockInSearch.trim().toLowerCase())
+                          );
+
+                        if (filteredLogs.length === 0) {
+                          return (
+                            <div className="text-center py-7 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
+                              <Truck size={30} className="mx-auto mb-1.5 opacity-40" />
+                              <p className="text-xs">
+                                {stockInSearch.trim() 
+                                  ? `Tidak ada surat jalan selesai dengan nomor "${stockInSearch}".`
+                                  : 'Belum ada riwayat penerimaan barang masuk.'}
+                              </p>
                             </div>
-                            <span className="text-[10px] text-slate-500 font-medium">
-                              {new Date(log.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
+                          );
+                        }
 
-                          <div className="flex flex-wrap gap-1.5">
-                            {log.items.map((item, idx) => (
-                              <span key={idx} className="bg-white border border-slate-200 px-2.5 py-1 rounded-xl text-[11px] font-bold text-slate-800">
-                                {item.materialName}: <strong className="text-emerald-600">+{item.qty} {item.unit}</strong>
-                              </span>
+                        return (
+                          <div className="space-y-2.5">
+                            {filteredLogs.map((log) => (
+                              <div key={log.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] bg-emerald-100 text-emerald-950 font-mono font-bold px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                                      📄 No Surat Jalan: {log.invoiceNo}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-slate-500 font-medium">
+                                    {new Date(log.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1.5">
+                                  {log.items.map((item, idx) => (
+                                    <span key={idx} className="bg-white border border-slate-200 px-2.5 py-1 rounded-xl text-[11px] font-bold text-slate-800">
+                                      {item.materialName}: <strong className="text-emerald-600 font-mono">+{item.qty} {item.unit}</strong>
+                                    </span>
+                                  ))}
+                                </div>
+
+                                <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-200/60">
+                                  Diterima oleh: <strong>{log.receivedBy}</strong>
+                                </div>
+                              </div>
                             ))}
                           </div>
-
-                          <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-200/60">
-                            Diterima oleh: <strong>{log.receivedBy}</strong>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })()}
                     </div>
-                  );
-                })()}
-              </div>
+
+                  </div>
+                );
+              })()}
 
             </div>
           )}

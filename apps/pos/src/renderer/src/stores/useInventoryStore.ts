@@ -76,6 +76,7 @@ export interface StockRequestItem {
 
 export interface StockRequest {
   id: string;
+  doNumber?: string; // Nomor Delivery Order / Surat Jalan
   createdAt: string; // ISO string
   requestedBy: string; // Nama staff/kasir
   urgency: StockRequestUrgency; // 'NORMAL' | 'URGENT'
@@ -118,8 +119,8 @@ interface InventoryState {
     items: { materialId: string; qtyRequested: number }[];
   }) => StockRequest;
 
-  updateStockRequestStatus: (requestId: string, status: StockRequestStatus, reviewedBy?: string) => void;
-  fulfillStockRequest: (requestId: string, receivedBy: string) => void;
+  updateStockRequestStatus: (requestId: string, status: StockRequestStatus, reviewedBy?: string, doNumber?: string) => void;
+  fulfillStockRequest: (requestId: string, receivedBy: string, customItems?: { materialId: string; qty: number }[], customInvoiceNo?: string) => void;
 
   // Actions Daily Stock Taking (Opname)
   submitDailyStockTake: (data: {
@@ -251,7 +252,10 @@ export const INITIAL_STOCK_REQUESTS: StockRequest[] = [
     requestedBy: 'Sari N. (Barista)',
     urgency: 'URGENT',
     notes: 'Biji Kopi Blend sisa 3 kg, perkiraan malam ini habis karena weekend rush',
-    status: 'PENDING',
+    status: 'ORDERED',
+    doNumber: 'DO-2026/09/02-12',
+    reviewedBy: 'Owner / Manager',
+    reviewedAt: new Date(Date.now() - 1 * 3600 * 1000).toISOString(),
     items: [
       {
         materialId: 'mat_1',
@@ -276,6 +280,7 @@ export const INITIAL_STOCK_REQUESTS: StockRequest[] = [
     urgency: 'NORMAL',
     notes: 'Restock mingguan Cup & Straw',
     status: 'ORDERED',
+    doNumber: 'DO-2026/09/01-08',
     reviewedBy: 'Owner / Manager',
     reviewedAt: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
     items: [
@@ -468,13 +473,14 @@ export const useInventoryStore = create<InventoryState>()(
         return newRequest;
       },
 
-      updateStockRequestStatus: (requestId, status, reviewedBy) => {
+      updateStockRequestStatus: (requestId, status, reviewedBy, doNumber) => {
         set((state) => ({
           stockRequests: state.stockRequests.map((req) =>
             req.id === requestId
               ? {
                   ...req,
                   status,
+                  doNumber: doNumber || req.doNumber || (status === 'ORDERED' ? `DO-${Date.now().toString().slice(-6)}` : req.doNumber),
                   reviewedBy: reviewedBy || req.reviewedBy,
                   reviewedAt: new Date().toISOString(),
                 }
@@ -483,23 +489,27 @@ export const useInventoryStore = create<InventoryState>()(
         }));
       },
 
-      fulfillStockRequest: (requestId, receivedBy) => {
+      fulfillStockRequest: (requestId, receivedBy, customItems, customInvoiceNo) => {
         const state = get();
         const request = state.stockRequests.find((r) => r.id === requestId);
         if (!request) return;
 
-        // Auto convert requested items into Stock In
-        const stockInItems = request.items.map((i) => ({
-          materialId: i.materialId,
-          qty: i.qtyRequested,
-        }));
+        const invoice = customInvoiceNo || request.doNumber || `DO-${request.id.slice(-4)}`;
+
+        // Convert requested items or use custom verified items
+        const stockInItems = customItems && customItems.length > 0
+          ? customItems
+          : request.items.map((i) => ({
+              materialId: i.materialId,
+              qty: i.qtyRequested,
+            }));
 
         // Trigger staff stock in
         state.addStaffStockIn({
-          supplierName: 'Supplier (Fulfill Request #' + request.id.slice(-4) + ')',
-          invoiceNo: `REQ-FULFILL-${request.id.slice(-4)}`,
+          supplierName: 'Penerimaan Toko',
+          invoiceNo: invoice,
           receivedBy,
-          notes: `Penerimaan barang dari pengajuan staff: ${request.requestedBy} (${request.notes || '-'})`,
+          notes: '',
           items: stockInItems,
         });
 

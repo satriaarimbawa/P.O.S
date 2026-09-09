@@ -893,6 +893,11 @@ export default function ReportsPage() {
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-2 border-b border-slate-200/60">
                       <div className="flex items-center gap-2">
                         <span className="font-black text-slate-900 text-sm">Request #{req.id.slice(-4)}</span>
+                        {req.doNumber && (
+                          <span className="text-[10px] bg-indigo-100 text-indigo-900 font-mono font-bold px-2 py-0.5 rounded-md border border-indigo-200">
+                            📄 {req.doNumber}
+                          </span>
+                        )}
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
                           req.urgency === 'URGENT' ? 'bg-rose-100 text-rose-800 animate-pulse' : 'bg-slate-200 text-slate-700'
                         }`}>
@@ -910,7 +915,7 @@ export default function ReportsPage() {
                         'bg-rose-100 text-rose-900'
                       }`}>
                         {req.status === 'PENDING' ? '⏳ Menunggu Persetujuan Owner' :
-                         req.status === 'ORDERED' ? '🚚 Sudah Dipesankan ke Supplier' :
+                         req.status === 'ORDERED' ? '🚚 Sudah Dipesankan (DO Terbit)' :
                          req.status === 'RECEIVED' ? '✅ Barang Sudah Diterima & Masuk Stok' :
                          '❌ Ditolak'}
                       </span>
@@ -958,13 +963,14 @@ export default function ReportsPage() {
                             </button>
                             <button
                               onClick={() => {
-                                updateStockRequestStatus(req.id, 'ORDERED', user?.name || 'Owner');
-                                setToastMsg('🚚 Status request diubah: Sudah Dipesankan ke Supplier!');
+                                const generatedDO = `DO-${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${req.id.slice(-4)}`;
+                                updateStockRequestStatus(req.id, 'ORDERED', user?.name || 'Owner', generatedDO);
+                                setToastMsg(`🚚 Status request diubah: DO #${generatedDO} diterbitkan ke Supplier!`);
                                 setTimeout(() => setToastMsg(null), 2500);
                               }}
                               className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer"
                             >
-                              Setujui & Order ke Supplier
+                              Setujui & Terbitkan DO
                             </button>
                           </>
                         )}
