@@ -23,14 +23,16 @@ import {
   PlayCircle,
   Package,
   Menu,
-  ChevronRight
+  ChevronRight,
+  Send,
+  Scale
 } from 'lucide-react';
 import MenuGrid from '../components/pos/MenuGrid';
 import OrderPanel from '../components/pos/OrderPanel';
 import ModifierModal, { ProductItem } from '../components/pos/ModifierModal';
 import PaymentDialog, { PaymentSuccessResult } from '../components/pos/PaymentDialog';
 import PrinterStatusModal from '../components/pos/PrinterStatusModal';
-import StaffStockModal from '../components/pos/StaffStockModal';
+import StaffStockModal, { StockModalTab } from '../components/pos/StaffStockModal';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useHardwareStore } from '../stores/useHardwareStore';
 import { useCartStore } from '../stores/useCartStore';
@@ -64,6 +66,12 @@ export default function CashierPage() {
   const [showArchInfo, setShowArchInfo] = useState(false);
   const [showPrinterModal, setShowPrinterModal] = useState(false);
   const [showStaffStockModal, setShowStaffStockModal] = useState(false);
+  const [stockModalTab, setStockModalTab] = useState<StockModalTab>('request');
+
+  const openStockModal = (tab: StockModalTab) => {
+    setStockModalTab(tab);
+    setShowStaffStockModal(true);
+  };
 
   const navigate = useNavigate();
   const { user, activeShift, setActiveShift, logout } = useAuthStore();
@@ -674,6 +682,7 @@ export default function CashierPage() {
       <StaffStockModal
         isOpen={showStaffStockModal}
         onClose={() => setShowStaffStockModal(false)}
+        initialTab={stockModalTab}
       />
 
       {/* SLIDE-OVER HAMBURGER DRAWER */}
@@ -757,33 +766,83 @@ export default function CashierPage() {
             {/* Menu List Sections (Scrollable) */}
             <div className="flex-1 p-5 space-y-6 overflow-y-auto">
               
-              {/* Section 1: Operasional Kasir */}
+              {/* SECTION 1: MANAJEMEN STOK & BAHAN (3 MENU UTAMA) */}
               <div>
                 <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
-                  Operasional Kasir & Toko
+                  Manajemen Stok & Bahan
                 </p>
                 <div className="space-y-1.5">
-                  {/* Stok Masuk & Request Staff */}
+                  {/* 1. Request Stok */}
                   <button
                     type="button"
                     onClick={() => {
                       setIsHamburgerOpen(false);
-                      setShowStaffStockModal(true);
+                      openStockModal('request');
                     }}
                     className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 group-hover:scale-105 transition-transform">
-                        <Package className="w-5 h-5" />
+                        <Send className="w-4 h-4" />
                       </div>
                       <div>
-                        <div className="font-bold text-xs">Stok Masuk & Request Bahan</div>
-                        <div className="text-[11px] text-slate-400">Penerimaan barang & request stok ke owner</div>
+                        <div className="font-bold text-xs">1. 📝 Request Stok Bahan</div>
+                        <div className="text-[11px] text-slate-400">Pengajuan restock bahan menipis ke Owner</div>
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
                   </button>
 
+                  {/* 2. Stok Masuk */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHamburgerOpen(false);
+                      openStockModal('stock-in');
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 group-hover:scale-105 transition-transform">
+                        <Package className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs">2. 📥 Stok Masuk (Penerimaan)</div>
+                        <div className="text-[11px] text-slate-400">Pencatatan barang datang dari kurir/supplier</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  </button>
+
+                  {/* 3. Stock Opname Harian */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHamburgerOpen(false);
+                      openStockModal('stock-take');
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800/80 hover:border-slate-700 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center border border-sky-500/30 group-hover:scale-105 transition-transform">
+                        <Scale className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs">3. 📋 Stock Opname Harian</div>
+                        <div className="text-[11px] text-slate-400">Hitung stok fisik per shift & audit selisih</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors" />
+                  </button>
+                </div>
+              </div>
+
+              {/* SECTION 2: OPERASIONAL KASIR & TOKO */}
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2 px-1">
+                  Operasional Kasir & Toko
+                </p>
+                <div className="space-y-1.5">
                   {/* KDS Kitchen Display */}
                   <button
                     type="button"

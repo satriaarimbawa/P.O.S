@@ -132,8 +132,8 @@ export default function ReportsPage() {
     }
   }, [isManager, navigate]);
 
-  // Tab State: 'sales' | 'stock-in' | 'stock-take' | 'pnl'
-  const [activeTab, setActiveTab] = useState<'sales' | 'stock-in' | 'stock-take' | 'pnl'>('sales');
+  // Tab State: 'sales' | 'requests' | 'stock-in' | 'stock-take' | 'pnl'
+  const [activeTab, setActiveTab] = useState<'sales' | 'requests' | 'stock-in' | 'stock-take' | 'pnl'>('sales');
   const [period, setPeriod] = useState<'Harian' | 'Mingguan' | 'Bulanan'>('Harian');
   const [chartMetric, setChartMetric] = useState<'revenue' | 'orders'>('revenue');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -450,7 +450,7 @@ export default function ReportsPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* 2. TAB NAVIGASI OWNER DASHBOARD (4 TABS)                 */}
+      {/* 2. TAB NAVIGASI OWNER DASHBOARD (5 TABS)                 */}
       {/* ======================================================== */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
         
@@ -467,7 +467,25 @@ export default function ReportsPage() {
           <span>📈 Penjualan & Jam Sibuk</span>
         </button>
 
-        {/* Tab 2: Permintaan & Stok Masuk */}
+        {/* Tab 2: Review Request Stok Staff */}
+        <button
+          onClick={() => setActiveTab('requests')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm transition-all ${
+            activeTab === 'requests'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+              : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+          }`}
+        >
+          <Send size={16} />
+          <span>📝 1. Request Stok Staff</span>
+          {pendingRequestsCount > 0 && (
+            <span className="bg-amber-500 text-slate-950 text-[10px] px-2 py-0.5 rounded-full font-black animate-pulse">
+              {pendingRequestsCount} Request Baru
+            </span>
+          )}
+        </button>
+
+        {/* Tab 3: Stok Masuk & Pembelian */}
         <button
           onClick={() => setActiveTab('stock-in')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm transition-all ${
@@ -477,15 +495,13 @@ export default function ReportsPage() {
           }`}
         >
           <Truck size={16} />
-          <span>📥 Stok Masuk & Request Staff</span>
-          {pendingRequestsCount > 0 && (
-            <span className="bg-amber-500 text-slate-950 text-[10px] px-2 py-0.5 rounded-full font-black animate-pulse">
-              {pendingRequestsCount} Request Baru
-            </span>
-          )}
+          <span>📥 2. Stok Masuk & Pembelian</span>
+          <span className="bg-slate-100 text-slate-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+            {stockInLogs.length} Surat Jalan
+          </span>
         </button>
 
-        {/* Tab 3: Daily Stock Taking (Opname) */}
+        {/* Tab 4: Daily Stock Taking (Opname) */}
         <button
           onClick={() => setActiveTab('stock-take')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm transition-all ${
@@ -495,7 +511,7 @@ export default function ReportsPage() {
           }`}
         >
           <ClipboardList size={16} />
-          <span>📋 Stock Taking Harian (Opname)</span>
+          <span>📋 3. Stock Taking Harian</span>
           {totalWastageCost > 0 && (
             <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
               -Rp {(totalWastageCost / 1000).toFixed(0)}k
@@ -503,7 +519,7 @@ export default function ReportsPage() {
           )}
         </button>
 
-        {/* Tab 4: Laba Rugi P&L */}
+        {/* Tab 5: Laba Rugi P&L */}
         <button
           onClick={() => setActiveTab('pnl')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm transition-all ${
@@ -840,21 +856,20 @@ export default function ReportsPage() {
       )}
 
       {/* ======================================================== */}
-      {/* TAB 2: STOK MASUK & PERMINTAAN STOK DARI STAFF           */}
+      {/* TAB 2: REVIEW PERMINTAAN STOK DARI STAFF (MENU 1 OWNER)  */}
       {/* ======================================================== */}
-      {activeTab === 'stock-in' && (
+      {activeTab === 'requests' && (
         <div className="space-y-6 animate-fade-in">
           
-          {/* 1. SECTION DAFTAR PERMINTAAN STOK DARI STAFF (REQUEST STOCK) */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
               <div>
                 <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                   <Send size={20} className="text-indigo-600" />
-                  Permintaan Stok Bahan dari Staff POS (Stock Requests)
+                  Review Permintaan Stok Bahan dari Staff POS
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Staff mengajukan kebutuhan stok riil dari bar sehingga Owner tidak perlu menerka pesanan
+                  Staff mengajukan kebutuhan stok riil dari meja kasir/barista sehingga Owner langsung tahu order bahan ke supplier
                 </p>
               </div>
 
@@ -865,13 +880,13 @@ export default function ReportsPage() {
 
             <div className="space-y-3">
               {stockRequests.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs">
-                  <Package size={32} className="mx-auto mb-2 opacity-50" />
+                <div className="text-center py-12 text-slate-400 text-xs">
+                  <Package size={36} className="mx-auto mb-2 opacity-40" />
                   <p>Tidak ada pengajuan permintaan stok dari staff saat ini.</p>
                 </div>
               ) : (
                 stockRequests.map((req) => (
-                  <div key={req.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 text-xs">
+                  <div key={req.id} className="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 text-xs">
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-2 border-b border-slate-200/60">
                       <div className="flex items-center gap-2">
                         <span className="font-black text-slate-900 text-sm">Request #{req.id.slice(-4)}</span>
@@ -944,7 +959,7 @@ export default function ReportsPage() {
                                 setToastMsg('🚚 Status request diubah: Sudah Dipesankan ke Supplier!');
                                 setTimeout(() => setToastMsg(null), 2500);
                               }}
-                              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-xs active:scale-95"
+                              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer"
                             >
                               Setujui & Order ke Supplier
                             </button>
@@ -958,7 +973,7 @@ export default function ReportsPage() {
                               setToastMsg('🎉 Barang diterima & otomatis ditambahkan ke stok aktif!');
                               setTimeout(() => setToastMsg(null), 3000);
                             }}
-                            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20 active:scale-95 flex items-center gap-1.5"
+                            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20 active:scale-95 flex items-center gap-1.5 cursor-pointer"
                           >
                             <CheckCircle2 size={14} />
                             <span>Konfirmasi Barang Sampai (Stock In)</span>
@@ -973,13 +988,22 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* 2. FORMULIR STOK MASUK SEDERHANA */}
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 3: STOK MASUK & PEMBELIAN (MENU 2 OWNER)              */}
+      {/* ======================================================== */}
+      {activeTab === 'stock-in' && (
+        <div className="space-y-6 animate-fade-in">
+          
+          {/* 1. FORMULIR STOK MASUK */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                   <Truck size={20} className="text-emerald-600" />
-                  Pencatatan Cepat Barang Masuk (Staff / Non-Request)
+                  Pencatatan Cepat Barang Masuk (Direct Inbound)
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Cukup isi jumlah barang fisik yang diterima tanpa perlu perhitungan harga atau HPP
@@ -1092,7 +1116,7 @@ export default function ReportsPage() {
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 py-2.5 rounded-2xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 py-2.5 rounded-2xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all cursor-pointer"
                 >
                   Simpan Barang Masuk
                 </button>
@@ -1100,7 +1124,7 @@ export default function ReportsPage() {
             </form>
           </div>
 
-          {/* 3. RIWAYAT STOK MASUK */}
+          {/* 2. RIWAYAT STOK MASUK */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
               <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
