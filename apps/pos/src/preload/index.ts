@@ -12,6 +12,10 @@ const posAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.MENU_GET_PRODUCTS, categoryId),
   getModifiers: (productId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.MENU_GET_MODIFIERS, productId),
+  createCategory: (cat: any) => ipcRenderer.invoke(IPC_CHANNELS.MENU_CREATE_CATEGORY, cat),
+  createProduct: (prod: any) => ipcRenderer.invoke(IPC_CHANNELS.MENU_CREATE_PRODUCT, prod),
+  deleteProduct: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.MENU_DELETE_PRODUCT, id),
+  deleteCategory: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.MENU_DELETE_CATEGORY, id),
 
   // Orders
   createOrder: (order: any) => ipcRenderer.invoke(IPC_CHANNELS.ORDER_CREATE, order),
@@ -26,15 +30,23 @@ const posAPI = {
   processPayment: (payment: any) => ipcRenderer.invoke(IPC_CHANNELS.PAYMENT_PROCESS, payment),
 
   // Hardware
-  printReceipt: (orderId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.PRINTER_PRINT_RECEIPT, orderId),
+  printReceipt: (typeOrOrderId: string, data?: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PRINTER_PRINT_RECEIPT, typeOrOrderId, data),
   openCashDrawer: () => ipcRenderer.invoke(IPC_CHANNELS.PRINTER_OPEN_DRAWER),
   testPrinter: () => ipcRenderer.invoke(IPC_CHANNELS.PRINTER_TEST),
+  checkPrinterStatus: () => ipcRenderer.invoke(IPC_CHANNELS.PRINTER_CHECK_STATUS),
+  setPrinterConfig: (config: any) => ipcRenderer.invoke(IPC_CHANNELS.PRINTER_SET_CONFIG, config),
+  getSystemPrinters: () => ipcRenderer.invoke(IPC_CHANNELS.PRINTER_GET_SYSTEM_PRINTERS),
+  scanNetworkPrinters: (subnet?: string) => ipcRenderer.invoke(IPC_CHANNELS.PRINTER_SCAN_NETWORK, subnet),
   onBarcodeScanned: (callback: (barcode: string) => void) => {
     const handler = (_: any, code: string) => callback(code);
     ipcRenderer.on(IPC_CHANNELS.SCANNER_DATA, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SCANNER_DATA, handler);
   },
+
+  // Window / App
+  toggleFullscreen: () => ipcRenderer.invoke(IPC_CHANNELS.APP_TOGGLE_FULLSCREEN),
+  getFullscreen: () => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_FULLSCREEN),
 
   // Shift
   openShift: (data: { userId: string; openingCash: number }) =>

@@ -36,17 +36,19 @@ export default function LoginPage() {
           triggerErrorShake('PIN salah. Silakan coba lagi.');
         }
       } else {
-        // Fallback demo matching staff pin
-        const matched = selectedStaff?.pin === enteredPin || enteredPin === '1234' || enteredPin === '0000';
-        if (matched) {
+        // Fallback demo matching staff pin dynamically
+        const matchedStaff = STAFF_LIST.find((s) => s.pin === enteredPin) || 
+          (enteredPin === '1234' || enteredPin === '0000' ? selectedStaff || STAFF_LIST[0] : null);
+
+        if (matchedStaff) {
           login({
-            id: selectedStaff?.id || 'usr-1',
-            name: selectedStaff?.name || 'Rian H.',
-            role: selectedStaff?.role || 'CASHIER'
+            id: matchedStaff.id,
+            name: matchedStaff.name,
+            role: matchedStaff.role as any
           });
           navigate('/');
         } else {
-          triggerErrorShake('PIN tidak cocok. (Gunakan: 1234 atau 0000)');
+          triggerErrorShake('PIN salah. Coba: 0000 (Kasir), 8888 (Manager), 1111 (Barista)');
         }
       }
     } catch (e) {
@@ -184,7 +186,8 @@ export default function LoginPage() {
                 }`}
               >
                 <span className="text-lg mb-0.5">{staff.avatar}</span>
-                <span className="text-[11px] font-semibold truncate max-w-[50px]">{staff.name}</span>
+                <span className="text-[11px] font-semibold truncate max-w-[60px]">{staff.name}</span>
+                <span className="text-[9px] font-mono text-slate-400 font-bold">({staff.pin})</span>
               </button>
             ))}
           </div>

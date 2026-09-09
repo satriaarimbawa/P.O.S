@@ -9,7 +9,7 @@ import { kdsServer } from '../kds/server';
 import { SyncWorker } from '../sync/worker';
 
 const generateId = () => 'id_' + Math.random().toString(36).substring(2, 12);
-const printer = new ThermalPrinter({ type: 'preview', paperWidth: 80 });
+const printer = new ThermalPrinter({ type: 'network', host: '192.168.1.100', port: 9100, paperWidth: 80 });
 
 export function initIpcHandlers() {
   // ==========================================
@@ -60,17 +60,86 @@ export function initIpcHandlers() {
     return query.all();
   });
 
-  ipcMain.handle(IPC_CHANNELS.MENU_GET_MODIFIERS, async (_, productId: string) => {
-    const db = getDb();
-    const mods = db.select().from(schema.modifiers).where(eq(schema.modifiers.productId, productId)).all();
-    return mods.map((m) => {
-      const options = db
-        .select()
-        .from(schema.modifierOptions)
-        .where(eq(schema.modifierOptions.modifierId, m.id))
-        .all();
-      return { ...m, options };
-    });
+  ipcMain.handle(IPC_CHANNELS.MENU_CREATE_CATEGORY, async (_, catData: any) => {
+    try {
+      const db = getDb();
+      const id = catData.id || `cat_${Date.now()}`;
+      db.insert(schema.categories)
+        .values({
+          id,
+          outletId: 'out_01',
+          name: catData.name,
+          sortOrder: catData.sortOrder || 0,
+          isActive: true,
+        })
+        .onConflictDoUpdate({
+          target: schema.categories.id,
+          set: { name: catData.name },
+        })
+        .run();
+
+      SyncWorker.queueEvent('CATEGORY_CREATED', { id, name: catData.name });
+      return { success: true, id };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MENU_CREATE_PRODUCT, async (_, prodData: any) => {
+    try {
+      const db = getDb();
+      const id = prodData.id || `p_${Date.now()}`;
+      db.insert(schema.products)
+        .values({
+          id,
+          categoryId: prodData.categoryId,
+          name: prodData.name,
+          price: prodData.price || 0,
+          costPrice: prodData.costPrice || null,
+          sku: prodData.sku || null,
+          station: prodData.station || 'BARISTA',
+          isActive: true,
+          trackInventory: false,
+        })
+        .onConflictDoUpdate({
+          target: schema.products.id,
+          set: {
+            name: prodData.name,
+            categoryId: prodData.categoryId,
+            price: prodData.price,
+            station: prodData.station,
+            sku: prodData.sku,
+          },
+        })
+        .run();
+
+      SyncWorker.queueEvent('PRODUCT_CREATED', { id, name: prodData.name, price: prodData.price });
+      return { success: true, id };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MENU_DELETE_PRODUCT, async (_, productId: string) => {
+    try {
+      const db = getDb();
+      db.delete(schema.products).where(eq(schema.products.id, productId)).run();
+      SyncWorker.queueEvent('PRODUCT_DELETED', { productId });
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MENU_DELETE_CATEGORY, async (_, categoryId: string) => {
+    try {
+      const db = getDb();
+      db.delete(schema.categories).where(eq(schema.categories.id, categoryId)).run();
+      SyncWorker.queueEvent('CATEGORY_DELETED', { categoryId });
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
   });
 
   // ==========================================
@@ -207,8 +276,70 @@ export function initIpcHandlers() {
     }
   });
 
+  ipcMain.handle(IPC_CHANNELS.PRINTER_CHECK_STATUS, async (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getAllWindows()[0];
+      let systemPrinters: any[] = [];
+      if (win) {
+        try {
+          systemPrinters = await win.webContents.getPrintersAsync();
+        } catch {}
+      }
+      return await printer.checkStatus(systemPrinters);
+    } catch (err: any) {
+      return {
+        connected: false,
+        message: err.message || 'Gagal memeriksa status printer',
+        type: 'error',
+        paperWidth: 80,
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PRINTER_GET_SYSTEM_PRINTERS, async (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getAllWindows()[0];
+      if (win) {
+        const printers = await win.webContents.getPrintersAsync();
+        return printers.map((p) => ({
+          name: p.name,
+          displayName: p.displayName || p.name,
+          description: p.description,
+          status: p.status,
+          isDefault: p.isDefault,
+        }));
+      }
+      return [];
+    } catch (err: any) {
+      console.error('[IPC] Failed to get system printers:', err);
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PRINTER_SCAN_NETWORK, async (_, subnet?: string) => {
+    try {
+      return await printer.scanSubnet(subnet || '192.168.1');
+    } catch (err: any) {
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PRINTER_SET_CONFIG, async (_, config: any) => {
+    try {
+      printer.setConfig(config);
+      return { success: true, status: await printer.checkStatus() };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.PRINTER_OPEN_DRAWER, async () => {
-    return await printer.openCashDrawer();
+    try {
+      return await printer.openCashDrawer();
+    } catch (err: any) {
+      console.error('[IPC] Open cash drawer failed:', err);
+      return false;
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.PRINTER_TEST, async () => {
@@ -218,7 +349,7 @@ export function initIpcHandlers() {
         cashierName: 'Admin',
         orderType: 'DINE_IN',
         tableNo: '01',
-        items: [{ productName: 'Espresso Test', qty: 1, unitPrice: 18000 }],
+        items: [{ productName: 'Espresso Test (80mm)', qty: 1, unitPrice: 18000 }],
         subtotal: 18000,
         taxAmount: 1980,
         total: 19980,
@@ -226,6 +357,24 @@ export function initIpcHandlers() {
       },
       { name: 'KOPIPOS PRINTER TEST' }
     );
+  });
+
+  // ==========================================
+  // APP & WINDOW MANAGEMENT
+  // ==========================================
+  ipcMain.handle(IPC_CHANNELS.APP_TOGGLE_FULLSCREEN, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getAllWindows()[0];
+    if (win) {
+      const isFull = win.isFullScreen();
+      win.setFullScreen(!isFull);
+      return !isFull;
+    }
+    return false;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.APP_GET_FULLSCREEN, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getAllWindows()[0];
+    return win ? win.isFullScreen() : false;
   });
 
   // ==========================================

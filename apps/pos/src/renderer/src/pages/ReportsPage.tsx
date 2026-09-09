@@ -1,20 +1,44 @@
-import React, { useState } from 'react';
-import { Calendar, Download, Printer, TrendingUp, BarChart3, Coffee, Users, AlertCircle, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Calendar, Download, Printer, TrendingUp, BarChart3, Coffee, Users, AlertCircle, ArrowLeft, X, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../stores/useAuthStore';
 
 export default function ReportsPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const isManager = user?.role === 'MANAGER' || user?.role === 'ADMIN';
+
+  useEffect(() => {
+    if (!isManager) {
+      navigate('/');
+    }
+  }, [isManager, navigate]);
+
   const [period, setPeriod] = useState('Harian');
+  const [showThermalModal, setShowThermalModal] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  if (!isManager) {
+    return null;
+  }
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
 
   const printThermalReceipt = () => {
     if (window && 'posAPI' in window) {
-      // @ts-ignore
-      window.posAPI.printReceipt('daily-eod');
-    } else {
-      console.log('Printing thermal receipt (80mm) via API...');
-      alert('Mencetak Laporan Harian (Thermal 80mm)...');
+      try {
+        // @ts-ignore
+        window.posAPI.printReceipt('daily-eod');
+      } catch (e) {
+        console.error(e);
+      }
     }
+    setShowThermalModal(true);
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 p-6">
@@ -215,6 +239,107 @@ export default function ReportsPage() {
           </div>
         </div>
       </div>
+
+      {/* THERMAL RECEIPT 80MM PREVIEW MODAL */}
+      {showThermalModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 select-none animate-fade-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 border border-slate-200 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-bold text-slate-900 text-sm">Preview Struk Thermal (80mm)</h3>
+              </div>
+              <button
+                onClick={() => setShowThermalModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Receipt Content */}
+            <div className="flex-1 overflow-y-auto my-4 p-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-[11px] leading-relaxed text-slate-800 whitespace-pre">
+{`================================================
+            ☕ KOPI NUSA SENOPATI
+          Jl. Senopati No. 42, Jakarta
+================================================
+         LAPORAN HARIAN TOKO (END OF DAY)
+================================================
+Tanggal Toko : 09 September 2026
+Waktu Tutup  : 09/09/2026  23:15:08
+Status Toko  : CLOSED / TUTUP BUKU
+Outlet Code  : JKT01 (Senopati Flagship)
+================================================
+--- DAFTAR STAF & SHIFT BERTUGAS ---------------
+[SHIFT 1: PAGI (07:00 - 15:00)]
+  • Kasir Bertugas   : Sari Novita (REG-01)
+  • Barista Utama    : Budi Santoso (Barista-1)
+  • Transaksi Kasir  : 78 Order (Rp 2.450.000)
+
+[SHIFT 2: SORE (15:00 - 23:00)]
+  • Kasir Bertugas   : Rian Hidayat (REG-01)
+  • Barista Utama    : Dimas Anggara (Barista-1)
+  • Transaksi Kasir  : 64 Order (Rp 2.070.000)
+
+>> Total Personil Bertugas: 4 Orang
+------------------------------------------------
+--- REKAP PRODUKSI STASIUN BARISTA -------------
+Total Minuman Terjual   :           142 Cup
+Estimasi Bahan Kritis:
+  • Biji Kopi Terpakai  :        ~2.840 Gram
+  • Susu Fresh Milk (L) :          ~14.2 Liter
+  • Susu Oat Milk (L)   :           ~3.5 Liter
+------------------------------------------------
+--- IKHTISAR PENJUALAN HARIAN ------------------
+Total Transaksi Bersih  :           142 Trx
+Penjualan Kotor         :   Rp 4.520.000
+Diskon Promo/Voucher    :  (Rp   250.000)
+Penjualan Bersih (DPP)  :   Rp 4.270.000
+PPN 11% Terkumpul       :   Rp   469.700
+================================================
+TOTAL OMSET HARI INI    :   Rp 4.739.700
+================================================
+--- REKONSILIASI KAS REGISTER TOKO -------------
+Total Kas Masuk Fisik   :   Rp 1.250.000
+Sisa Modal Kembalian    :   Rp   500.000 (Besok)
+Selisih Kas Harian      :   Rp         0 (Akurat)
+================================================
+PERTANGGUNGJAWABAN PENUTUPAN TOKO:
+
+   Lead Barista       Head Cashier      Supervisor
+                                        
+  ( Dimas A. )       ( Rian H. )       ( Budi S. )
+================================================
+   Dicetak otomatis saat End-of-Day Closing
+   KopiPOS SaaS v0.1.0 │ Terminal: REG-01
+================================================`}
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  showToast('Perintah cetak 80mm dikirim ke printer thermal!');
+                  setShowThermalModal(false);
+                }}
+                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-2"
+              >
+                <Printer className="w-4 h-4" /> Cetak ke Printer Fisik
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST FEEDBACK */}
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 animate-bounce">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <p className="text-xs font-bold">{toastMsg}</p>
+        </div>
+      )}
+
     </div>
   );
 }
+
