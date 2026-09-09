@@ -141,9 +141,11 @@ export default function ReportsPage() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // ==========================================
-  // STATE MODIFIKASI REQUEST OLEH OWNER
+  // STATE MASTER-DETAIL REVIEW REQUEST STOK
   // ==========================================
-  const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [requestFilter, setRequestFilter] = useState<'ALL' | 'PENDING' | 'ORDERED' | 'RECEIVED' | 'REJECTED'>('ALL');
+  const [requestSearch, setRequestSearch] = useState<string>('');
   const [editDoNumber, setEditDoNumber] = useState<string>('');
   const [editItems, setEditItems] = useState<{ materialId: string; qtyRequested: number }[]>([]);
 
@@ -229,20 +231,24 @@ export default function ReportsPage() {
   ];
 
   const pendingRequestsCount = stockRequests.filter(r => r.status === 'PENDING').length;
+  const orderedRequestsCount = stockRequests.filter(r => r.status === 'ORDERED').length;
+  const receivedRequestsCount = stockRequests.filter(r => r.status === 'RECEIVED').length;
+  const rejectedRequestsCount = stockRequests.filter(r => r.status === 'REJECTED').length;
 
   // ==========================================
-  // HANDLERS: MODIFIKASI & PERSETUJUAN REQUEST OLEH OWNER
+  // HANDLERS: MASTER-DETAIL & MODIFIKASI REQUEST OLEH OWNER
   // ==========================================
-  const handleStartEditRequest = (req: StockRequest) => {
-    setEditingRequestId(req.id);
+  const handleOpenRequestDetail = (reqId: string) => {
+    const req = stockRequests.find(r => r.id === reqId);
+    if (!req) return;
+    setSelectedRequestId(reqId);
     const defaultDO = req.doNumber || `DO-${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${req.id.slice(-4)}`;
     setEditDoNumber(defaultDO);
     setEditItems(req.items.map(it => ({ materialId: it.materialId, qtyRequested: it.qtyRequested })));
   };
 
-  const handleCancelEditRequest = () => {
-    setEditingRequestId(null);
-    setEditItems([]);
+  const handleBackToList = () => {
+    setSelectedRequestId(null);
   };
 
   const handleAddEditItemRow = () => {
@@ -270,10 +276,21 @@ export default function ReportsPage() {
 
     const doNo = editDoNumber.trim() || `DO-${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${requestId.slice(-4)}`;
     updateStockRequestStatus(requestId, 'ORDERED', user?.name || 'Owner', doNo, editItems);
-    setEditingRequestId(null);
-    setEditItems([]);
     setToastMsg(`🚀 Request disetujui! DO #${doNo} berhasil diterbitkan dengan kuantitas modifikasi.`);
     setTimeout(() => setToastMsg(null), 3500);
+  };
+
+  const handleQuickApproveRequest = (req: StockRequest) => {
+    const generatedDO = editDoNumber.trim() || req.doNumber || `DO-${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${req.id.slice(-4)}`;
+    updateStockRequestStatus(req.id, 'ORDERED', user?.name || 'Owner', generatedDO);
+    setToastMsg(`🚚 Request disetujui! DO #${generatedDO} diterbitkan.`);
+    setTimeout(() => setToastMsg(null), 2500);
+  };
+
+  const handleRejectRequest = (reqId: string) => {
+    updateStockRequestStatus(reqId, 'REJECTED', user?.name || 'Owner');
+    setToastMsg('❌ Permintaan stok ditolak.');
+    setTimeout(() => setToastMsg(null), 2500);
   };
 
   // ==========================================
@@ -912,277 +929,580 @@ export default function ReportsPage() {
       )}
 
       {/* ======================================================== */}
-      {/* TAB 2: REVIEW PERMINTAAN STOK DARI STAFF (MENU 1 OWNER)  */}
+      {/* TAB 2: REVIEW PERMINTAAN STOK DARI STAFF (MASTER-DETAIL) */}
       {/* ======================================================== */}
       {activeTab === 'requests' && (
         <div className="space-y-6 animate-fade-in">
           
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
-              <div>
-                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <Send size={20} className="text-indigo-600" />
-                  Review Permintaan Stok Bahan dari Staff POS
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Owner dapat memodifikasi jumlah bahan yang akan dikirim sebelum menyetujui dan menerbitkan Surat Jalan (DO).
-                </p>
-              </div>
+          {selectedRequestId ? (
+            /* ====================================================== */
+            /* SUB-VIEW A: DETAIL PO TERPILIH (FOKUS KE PO INI)       */
+            /* ====================================================== */
+            (() => {
+              const currentReq = stockRequests.find(r => r.id === selectedRequestId);
+              if (!currentReq) return null;
 
-              <span className="text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl">
-                {pendingRequestsCount} Permintaan Menunggu Tindakan
-              </span>
-            </div>
+              return (
+                <div className="space-y-6 animate-fade-in">
+                  
+                  {/* Header Navigasi Kembali & Ringkasan */}
+                  <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleBackToList}
+                        className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-2.5 rounded-2xl transition-all cursor-pointer shadow-xs active:scale-95"
+                        title="Kembali ke Daftar Permintaan"
+                      >
+                        <ArrowLeft size={16} />
+                        <span>Kembali ke Daftar Request</span>
+                      </button>
 
-            <div className="space-y-4">
-              {stockRequests.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-xs">
-                  <Package size={36} className="mx-auto mb-2 opacity-40" />
-                  <p>Tidak ada pengajuan permintaan stok dari staff saat ini.</p>
-                </div>
-              ) : (
-                stockRequests.map((req) => (
-                  <div key={req.id} className="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3.5 text-xs transition-all">
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-2 border-b border-slate-200/60">
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-slate-900 text-sm">Request #{req.id.slice(-4)}</span>
-                        {req.doNumber && (
-                          <span className="text-[10px] bg-indigo-100 text-indigo-900 font-mono font-bold px-2 py-0.5 rounded-md border border-indigo-200">
-                            📄 {req.doNumber}
-                          </span>
-                        )}
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                          req.urgency === 'URGENT' ? 'bg-rose-100 text-rose-800 animate-pulse' : 'bg-slate-200 text-slate-700'
-                        }`}>
-                          {req.urgency === 'URGENT' ? '🔴 Mendesak (Habis Hari Ini)' : '🟢 Normal (Restock Rutin)'}
-                        </span>
-                        <span className="text-slate-400 font-mono text-[11px]">
-                          {new Date(req.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB
-                        </span>
-                        <span className="text-slate-500 font-medium text-[11px]">
-                          • Diajukan oleh: <strong>{req.requestedBy}</strong>
-                        </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-base sm:text-lg font-black text-slate-900">
+                            Detail Request #{currentReq.id.slice(-4)}
+                          </h2>
+                          {currentReq.doNumber && (
+                            <span className="text-xs font-mono font-bold bg-indigo-100 text-indigo-900 px-2.5 py-0.5 rounded-lg border border-indigo-200">
+                              📄 {currentReq.doNumber}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Diajukan oleh: <strong>{currentReq.requestedBy}</strong> • Outlet: <strong>Kopi Nusa Senopati</strong>
+                        </p>
                       </div>
+                    </div>
 
-                      <span className={`text-xs font-black px-3 py-1 rounded-xl ${
-                        req.status === 'PENDING' ? 'bg-amber-100 text-amber-900' :
-                        req.status === 'ORDERED' ? 'bg-blue-100 text-blue-900' :
-                        req.status === 'RECEIVED' ? 'bg-emerald-100 text-emerald-900' :
-                        'bg-rose-100 text-rose-900'
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-black px-3 py-1.5 rounded-xl ${
+                        currentReq.urgency === 'URGENT' ? 'bg-rose-100 text-rose-900 border border-rose-200 animate-pulse' : 'bg-slate-100 text-slate-800'
                       }`}>
-                        {req.status === 'PENDING' ? '⏳ Menunggu Persetujuan Owner' :
-                         req.status === 'ORDERED' ? '🚚 DO Diterbitkan (Sedang Dikirim)' :
-                         req.status === 'RECEIVED' ? '✅ Barang Diterima & Masuk Stok Toko' :
+                        {currentReq.urgency === 'URGENT' ? '🔴 Mendesak (Habis Hari Ini)' : '🟢 Normal (Restock Rutin)'}
+                      </span>
+
+                      <span className={`text-xs font-black px-3.5 py-1.5 rounded-xl ${
+                        currentReq.status === 'PENDING' ? 'bg-amber-100 text-amber-950 border border-amber-300' :
+                        currentReq.status === 'ORDERED' ? 'bg-blue-100 text-blue-950 border border-blue-300' :
+                        currentReq.status === 'RECEIVED' ? 'bg-emerald-100 text-emerald-950 border border-emerald-300' :
+                        'bg-rose-100 text-rose-950 border border-rose-300'
+                      }`}>
+                        {currentReq.status === 'PENDING' ? '⏳ Menunggu Persetujuan Owner' :
+                         currentReq.status === 'ORDERED' ? '🚚 DO Diterbitkan (Sedang Dikirim)' :
+                         currentReq.status === 'RECEIVED' ? '✅ Barang Sudah Diterima Staf' :
                          '❌ Ditolak'}
                       </span>
                     </div>
+                  </div>
 
-                    {/* EDIT FORM (JIKA OWNER SEDANG MEMODIFIKASI REQUEST INI) */}
-                    {editingRequestId === req.id ? (
-                      <div className="bg-indigo-50/80 p-4 sm:p-5 rounded-2xl border-2 border-indigo-400 space-y-3.5 animate-scale-up">
-                        <div className="flex items-center justify-between pb-2 border-b border-indigo-200">
-                          <div className="flex items-center gap-2">
-                            <Edit3 size={16} className="text-indigo-700" />
-                            <span className="font-black text-sm text-indigo-950">
-                              Modifikasi Jumlah & Bahan yang Akan Dikirim
+                  {/* Konten Utama Detail PO */}
+                  <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+                    
+                    {/* INFO STATUS KHUSUS UNTUK ORDERED / RECEIVED / REJECTED */}
+                    {currentReq.status === 'ORDERED' && (
+                      <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-start gap-3 text-xs text-blue-900">
+                        <Truck size={20} className="text-blue-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-black text-sm text-blue-950">
+                            Surat Jalan ({currentReq.doNumber}) Sedang Dalam Pengiriman ke Outlet
+                          </p>
+                          <p className="text-blue-800">
+                            Owner telah menyetujui pengiriman ini. Begitu barang fisik tiba di outlet, staf kasir/barista yang bertugas akan melakukan verifikasi dan konfirmasi penerimaan fisik via POS (Menu 2: Stok Masuk).
+                          </p>
+                          <p className="text-[11px] text-blue-700 pt-1">
+                            Disetujui oleh: <strong>{currentReq.reviewedBy || 'Owner'}</strong> ({currentReq.reviewedAt ? new Date(currentReq.reviewedAt).toLocaleString('id-ID') : '-'})
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {currentReq.status === 'RECEIVED' && (
+                      <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-start gap-3 text-xs text-emerald-900">
+                        <CheckCircle2 size={20} className="text-emerald-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-black text-sm text-emerald-950">
+                            Barang Telah Diverifikasi & Masuk ke Stok Aktif Toko
+                          </p>
+                          <p className="text-emerald-800">
+                            Staf di outlet ({currentReq.reviewedBy || 'Staf Toko'}) telah memeriksa fisik barang dan mengonfirmasi stok masuk. Angka stok outlet telah terupdate secara otomatis.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {currentReq.status === 'REJECTED' && (
+                      <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-2xl flex items-start gap-3 text-xs text-rose-900">
+                        <XCircle size={20} className="text-rose-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-black text-sm text-rose-950">
+                            Pengajuan Permintaan Stok Ini Ditolak
+                          </p>
+                          <p className="text-rose-800">
+                            Ditolak oleh Owner ({currentReq.reviewedBy || 'Owner'}) pada {currentReq.reviewedAt ? new Date(currentReq.reviewedAt).toLocaleString('id-ID') : '-'}.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* JIKA STATUS PENDING: FORM MODIFIKASI & PERSETUJUAN */}
+                    {currentReq.status === 'PENDING' ? (
+                      <div className="space-y-6">
+                        
+                        {/* Box Header Form Edit */}
+                        <div className="p-4 bg-indigo-50/60 border border-indigo-100 rounded-2xl space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-black text-xs text-indigo-950 flex items-center gap-1.5">
+                              <Edit3 size={15} className="text-indigo-600" />
+                              <span>Form Persetujuan & Penyesuaian Pengiriman Barang (Owner)</span>
+                            </span>
+                            <span className="text-[11px] text-indigo-700 font-semibold">
+                              Sesuaikan jumlah barang sebelum menerbitkan Surat Jalan (DO)
                             </span>
                           </div>
-                          <span className="text-[11px] text-indigo-700 font-semibold">
-                            Sesuaikan Qty sebelum terbitkan Surat Jalan (DO)
-                          </span>
-                        </div>
 
-                        {/* Input No DO */}
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <label className="text-xs font-bold text-slate-700 sm:w-44 shrink-0">
-                            Nomor Surat Jalan (DO):
-                          </label>
-                          <input
-                            type="text"
-                            value={editDoNumber}
-                            onChange={(e) => setEditDoNumber(e.target.value)}
-                            className="flex-1 text-xs font-mono font-bold p-2 bg-white border border-slate-300 rounded-xl focus:border-indigo-500 focus:outline-none text-slate-900"
-                            placeholder="Contoh: DO-2026/09/02-12"
-                          />
-                        </div>
-
-                        {/* Daftar Bahan yang Diedit */}
-                        <div className="space-y-2 pt-1">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-slate-700">
-                              Daftar Bahan & Kuantitas yang Disetujui:
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2 border-t border-indigo-100">
+                            <label className="text-xs font-bold text-slate-700 sm:w-48 shrink-0">
+                              Nomor Surat Jalan (DO):
                             </label>
+                            <input
+                              type="text"
+                              value={editDoNumber}
+                              onChange={(e) => setEditDoNumber(e.target.value)}
+                              className="flex-1 text-xs font-mono font-bold p-2.5 bg-white border border-slate-300 rounded-xl focus:border-indigo-500 focus:outline-none text-slate-900 shadow-2xs"
+                              placeholder="Contoh: DO-2026/09/02-12"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Tabel Modifikasi Item */}
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                                Daftar Bahan Baku yang Akan Dikirim:
+                              </h3>
+                              <p className="text-[11px] text-slate-500">
+                                Anda dapat mengubah kuantitas atau menambah bahan baku lain untuk dikirimkan bersamaan.
+                              </p>
+                            </div>
                             <button
                               type="button"
                               onClick={handleAddEditItemRow}
-                              className="flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-white hover:bg-indigo-100 px-2.5 py-1 rounded-xl border border-indigo-300 transition-colors cursor-pointer shadow-xs"
+                              className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200 transition-colors cursor-pointer shadow-xs"
                             >
-                              <Plus size={13} /> + Tambah Bahan Lain ke DO
+                              <Plus size={14} /> + Tambah Bahan Lain ke DO
                             </button>
                           </div>
 
-                          <div className="space-y-2">
-                            {editItems.map((item, idx) => {
-                              const selectedMat = materials.find(m => m.id === item.materialId) || materials[0];
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead>
+                                <tr className="border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider bg-slate-50">
+                                  <th className="p-3">Bahan Baku</th>
+                                  <th className="p-3">Sisa di Bar saat Req</th>
+                                  <th className="p-3 text-center">Permintaan Staf</th>
+                                  <th className="p-3 text-center w-48">Qty Disetujui Kirim (DO)</th>
+                                  <th className="p-3 text-center w-16">Hapus</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 font-medium">
+                                {editItems.map((item, idx) => {
+                                  const selectedMat = materials.find(m => m.id === item.materialId) || materials[0];
+                                  const origItem = currentReq.items.find(it => it.materialId === item.materialId);
+                                  const curSisa = Number((selectedMat?.startStock + selectedMat?.stockIn - selectedMat?.usedSystem).toFixed(2));
 
-                              return (
-                                <div key={idx} className="flex items-center gap-2 p-2.5 bg-white border border-indigo-200 rounded-2xl shadow-xs">
-                                  <div className="flex-1">
-                                    <select
-                                      value={item.materialId}
-                                      onChange={(e) => {
-                                        const newId = e.target.value;
-                                        setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, materialId: newId } : it));
-                                      }}
-                                      className="w-full text-xs font-bold p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:bg-white outline-none"
-                                    >
-                                      {materials.map((m) => {
-                                        const curSisa = Number((m.startStock + m.stockIn - m.usedSystem).toFixed(2));
-                                        return (
-                                          <option key={m.id} value={m.id}>
-                                            {m.name} (Sisa di bar: ~{curSisa} {m.unit})
-                                          </option>
-                                        );
-                                      })}
-                                    </select>
-                                  </div>
+                                  return (
+                                    <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                                      <td className="p-3">
+                                        <select
+                                          value={item.materialId}
+                                          onChange={(e) => {
+                                            const newId = e.target.value;
+                                            setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, materialId: newId } : it));
+                                          }}
+                                          className="w-full text-xs font-bold p-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-indigo-500"
+                                        >
+                                          {materials.map((m) => (
+                                            <option key={m.id} value={m.id}>
+                                              {m.name} ({m.category})
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </td>
 
-                                  <div className="w-36 flex items-center gap-1.5">
-                                    <input
-                                      type="number"
-                                      min="0.1"
-                                      step="0.1"
-                                      value={item.qtyRequested}
-                                      onChange={(e) => {
-                                        const val = parseFloat(e.target.value) || 0;
-                                        setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, qtyRequested: val } : it));
-                                      }}
-                                      className="w-full text-xs font-mono font-black p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-center focus:bg-white outline-none"
-                                      placeholder="Qty kirim"
-                                    />
-                                    <span className="text-[10px] font-bold text-slate-500 w-10 shrink-0">{selectedMat?.unit}</span>
-                                  </div>
+                                      <td className="p-3 font-mono font-semibold text-slate-600">
+                                        ~{curSisa} {selectedMat?.unit}
+                                      </td>
 
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveEditItemRow(idx)}
-                                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                    title="Hapus bahan ini dari DO"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </div>
-                              );
-                            })}
+                                      <td className="p-3 text-center">
+                                        {origItem ? (
+                                          <span className="font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg">
+                                            {origItem.qtyRequested} {origItem.unit}
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] text-indigo-600 italic bg-indigo-50 px-2 py-0.5 rounded-md font-bold">
+                                            + Bahan Tambahan Owner
+                                          </span>
+                                        )}
+                                      </td>
+
+                                      <td className="p-3">
+                                        <div className="flex items-center justify-center gap-1.5">
+                                          <input
+                                            type="number"
+                                            min="0.1"
+                                            step="0.1"
+                                            value={item.qtyRequested}
+                                            onChange={(e) => {
+                                              const val = parseFloat(e.target.value) || 0;
+                                              setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, qtyRequested: val } : it));
+                                            }}
+                                            className="w-28 text-xs font-mono font-black p-2 bg-white border-2 border-indigo-400 rounded-xl text-indigo-950 text-center focus:bg-indigo-50/30 outline-none shadow-2xs"
+                                            placeholder="Qty"
+                                          />
+                                          <span className="text-[11px] font-bold text-slate-500 w-10 shrink-0">{selectedMat?.unit}</span>
+                                        </div>
+                                      </td>
+
+                                      <td className="p-3 text-center">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveEditItemRow(idx)}
+                                          className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                                          title="Hapus bahan dari DO"
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
 
-                        {/* Tombol Aksi Edit */}
-                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-200">
+                        {/* ACTION BUTTONS PANEL */}
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200">
                           <button
                             type="button"
-                            onClick={handleCancelEditRequest}
-                            className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 transition-colors cursor-pointer"
+                            onClick={() => handleRejectRequest(currentReq.id)}
+                            className="w-full sm:w-auto px-4 py-2.5 bg-white hover:bg-rose-50 text-rose-700 font-bold rounded-2xl border border-slate-300 transition-all cursor-pointer text-xs"
                           >
-                            Batal
+                            ❌ Tolak Permintaan
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveAndApproveEditedRequest(req.id)}
-                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Send size={14} />
-                            <span>Setujui & Terbitkan DO ({editDoNumber.trim() || `DO-${req.id.slice(-4)}`})</span>
-                          </button>
+
+                          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                            <button
+                              type="button"
+                              onClick={() => handleQuickApproveRequest(currentReq)}
+                              className="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-2xl transition-all cursor-pointer text-xs active:scale-95"
+                              title="Gunakan kuantitas asli yang diminta staf"
+                            >
+                              ⚡ Setujui Sesuai Request Staf
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleSaveAndApproveEditedRequest(currentReq.id)}
+                              className="flex-1 sm:flex-initial px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs"
+                            >
+                              <Send size={15} />
+                              <span>Setujui & Terbitkan DO ({editDoNumber.trim() || `DO-${currentReq.id.slice(-4)}`})</span>
+                            </button>
+                          </div>
                         </div>
+
                       </div>
                     ) : (
-                      <>
-                        {/* TAMPILAN NORMAL RINCIAN ITEM */}
-                        <div className="flex flex-wrap gap-2">
-                          {req.items.map((item, i) => (
-                            <div key={i} className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-2xs">
-                              <span className="font-bold text-slate-900">{item.materialName}:</span>
-                              <span className="bg-indigo-50 text-indigo-700 font-black px-2 py-0.5 rounded-lg">
-                                {req.status === 'PENDING' ? `Minta: ${item.qtyRequested} ${item.unit}` : `Dikirim: ${item.qtyRequested} ${item.unit}`}
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                (Sisa di bar saat req: {item.currentStockEstimate} {item.unit})
-                              </span>
-                            </div>
-                          ))}
+                      /* JIKA STATUS SUDAH ORDERED / RECEIVED / REJECTED: TAMPILKAN TABEL DETAIL READ-ONLY */
+                      <div className="space-y-4">
+                        <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                          Rincian Bahan Baku Surat Jalan (DO):
+                        </h3>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider bg-slate-50">
+                                <th className="p-3">Nama Bahan Baku</th>
+                                <th className="p-3">Kategori</th>
+                                <th className="p-3 text-right">Kuantitas Tertera di Surat Jalan</th>
+                                <th className="p-3">Satuan</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-medium">
+                              {currentReq.items.map((item, idx) => {
+                                const selectedMat = materials.find(m => m.id === item.materialId);
+                                return (
+                                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                                    <td className="p-3 font-bold text-slate-900">{item.materialName}</td>
+                                    <td className="p-3">
+                                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                                        {selectedMat?.category || 'Bahan'}
+                                      </span>
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-black text-indigo-700">
+                                      {item.qtyRequested}
+                                    </td>
+                                    <td className="p-3 font-bold text-slate-500">{item.unit}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
-
-                        {/* STATUS & OWNER ACTION CONTROLS */}
-                        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60">
-                          <span className="text-[11px] text-slate-400">
-                            Status: <strong className="text-slate-600">{req.status}</strong> {req.reviewedBy ? `• Diproses oleh: ${req.reviewedBy}` : ''}
-                          </span>
-
-                          <div className="flex items-center gap-2">
-                            {req.status === 'PENDING' && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    updateStockRequestStatus(req.id, 'REJECTED', user?.name || 'Owner');
-                                    setToastMsg('❌ Request stok ditolak.');
-                                    setTimeout(() => setToastMsg(null), 2500);
-                                  }}
-                                  className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 font-bold rounded-xl border border-slate-300 transition-colors cursor-pointer"
-                                >
-                                  Tolak
-                                </button>
-                                
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEditRequest(req)}
-                                  className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-300 font-bold rounded-xl transition-all shadow-2xs active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                                  title="Edit kuantitas atau bahan sebelum disetujui"
-                                >
-                                  <Edit3 size={14} />
-                                  <span>✏️ Modifikasi & Setujui DO</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const generatedDO = `DO-${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${req.id.slice(-4)}`;
-                                    updateStockRequestStatus(req.id, 'ORDERED', user?.name || 'Owner', generatedDO);
-                                    setToastMsg(`🚚 Status request disetujui: DO #${generatedDO} diterbitkan!`);
-                                    setTimeout(() => setToastMsg(null), 2500);
-                                  }}
-                                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-xs active:scale-95 cursor-pointer"
-                                  title="Langsung setujui sesuai permintaan staf"
-                                >
-                                  Setujui Cepat
-                                </button>
-                              </>
-                            )}
-
-                            {req.status === 'ORDERED' && (
-                              <div className="flex items-center gap-2 text-xs font-bold text-blue-800 bg-blue-50 border border-blue-200 px-3.5 py-1.5 rounded-xl">
-                                <Truck size={15} className="text-blue-600" />
-                                <span>🚚 DO Sedang Dikirim — Menunggu Staf Toko Terima & Verifikasi Fisik di POS</span>
-                              </div>
-                            )}
-
-                            {req.status === 'RECEIVED' && (
-                              <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-xl">
-                                <CheckCircle2 size={15} className="text-emerald-600" />
-                                <span>✅ Barang Telah Diterima oleh Staf & Masuk ke Stok Aktif Toko</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </>
+                      </div>
                     )}
 
                   </div>
-                ))
-              )}
+
+                </div>
+              );
+            })()
+          ) : (
+            /* ====================================================== */
+            /* SUB-VIEW B: DAFTAR RINGKASAN REQUEST (MASTER LIST)     */
+            /* ====================================================== */
+            <div className="space-y-6">
+              
+              {/* Filter Tabs & Search Bar */}
+              <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+                      <Send size={18} className="text-indigo-600" />
+                      <span>Daftar Permintaan Stok Bahan (Purchase Orders)</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Klik salah satu request untuk masuk ke detail PO dan memodifikasi jumlah sebelum disetujui.
+                    </p>
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative w-full sm:w-72">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={requestSearch}
+                      onChange={(e) => setRequestSearch(e.target.value)}
+                      placeholder="Cari ID, No DO, atau Bahan..."
+                      className="w-full pl-8 pr-7 py-2 bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl text-xs font-mono outline-none transition-all placeholder:font-sans"
+                    />
+                    {requestSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setRequestSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Filter Buttons */}
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setRequestFilter('ALL')}
+                    className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                      requestFilter === 'ALL'
+                        ? 'bg-slate-900 text-white shadow-xs font-black'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Semua ({stockRequests.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRequestFilter('PENDING')}
+                    className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                      requestFilter === 'PENDING'
+                        ? 'bg-amber-500 text-white shadow-xs font-black'
+                        : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-200'
+                    }`}
+                  >
+                    <span>⏳ Menunggu Tindakan</span>
+                    <span className="text-[10px] bg-white/30 px-1.5 py-0.2 rounded-full font-black">
+                      {pendingRequestsCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRequestFilter('ORDERED')}
+                    className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                      requestFilter === 'ORDERED'
+                        ? 'bg-blue-600 text-white shadow-xs font-black'
+                        : 'bg-blue-50 text-blue-900 hover:bg-blue-100 border border-blue-200'
+                    }`}
+                  >
+                    <span>🚚 Sedang Dikirim (DO)</span>
+                    <span className="text-[10px] bg-white/30 px-1.5 py-0.2 rounded-full font-black">
+                      {orderedRequestsCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRequestFilter('RECEIVED')}
+                    className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                      requestFilter === 'RECEIVED'
+                        ? 'bg-emerald-600 text-white shadow-xs font-black'
+                        : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 border border-emerald-200'
+                    }`}
+                  >
+                    <span>✅ Selesai Diterima</span>
+                    <span className="text-[10px] bg-white/30 px-1.5 py-0.2 rounded-full font-black">
+                      {receivedRequestsCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRequestFilter('REJECTED')}
+                    className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                      requestFilter === 'REJECTED'
+                        ? 'bg-rose-600 text-white shadow-xs font-black'
+                        : 'bg-rose-50 text-rose-900 hover:bg-rose-100 border border-rose-200'
+                    }`}
+                  >
+                    ❌ Ditolak ({rejectedRequestsCount})
+                  </button>
+                </div>
+              </div>
+
+              {/* Table / List of Requests */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs">
+                {(() => {
+                  const filtered = stockRequests.filter((req) => {
+                    const matchesFilter = requestFilter === 'ALL' || req.status === requestFilter;
+                    const q = requestSearch.trim().toLowerCase();
+                    const matchesSearch = !q || (
+                      req.id.toLowerCase().includes(q) ||
+                      (req.doNumber && req.doNumber.toLowerCase().includes(q)) ||
+                      req.requestedBy.toLowerCase().includes(q) ||
+                      req.items.some(i => i.materialName.toLowerCase().includes(q))
+                    );
+                    return matchesFilter && matchesSearch;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-12 text-slate-400 text-xs">
+                        <Package size={36} className="mx-auto mb-2 opacity-40" />
+                        <p>
+                          {requestSearch.trim()
+                            ? `Tidak ditemukan pengajuan dengan kata kunci "${requestSearch}".`
+                            : 'Tidak ada pengajuan pada kategori filter ini.'}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-slate-500 font-black uppercase tracking-wider bg-slate-50">
+                            <th className="p-3">ID & Surat Jalan</th>
+                            <th className="p-3">Waktu & Pemohon</th>
+                            <th className="p-3">Urgensi</th>
+                            <th className="p-3">Ringkasan Bahan</th>
+                            <th className="p-3">Status</th>
+                            <th className="p-3 text-right">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium">
+                          {filtered.map((req) => (
+                            <tr 
+                              key={req.id} 
+                              onClick={() => handleOpenRequestDetail(req.id)}
+                              className="hover:bg-indigo-50/40 transition-colors cursor-pointer group"
+                            >
+                              <td className="p-3">
+                                <div className="flex flex-col">
+                                  <span className="font-mono font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
+                                    Request #{req.id.slice(-4)}
+                                  </span>
+                                  {req.doNumber ? (
+                                    <span className="text-[10px] font-mono text-indigo-700 font-bold">
+                                      {req.doNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 italic">Belum ada DO</span>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="p-3">
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-slate-800">{req.requestedBy}</span>
+                                  <span className="text-[10px] text-slate-400">
+                                    {new Date(req.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })} • {new Date(req.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                                  </span>
+                                </div>
+                              </td>
+
+                              <td className="p-3">
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                  req.urgency === 'URGENT' ? 'bg-rose-100 text-rose-800 animate-pulse' : 'bg-slate-100 text-slate-700'
+                                }`}>
+                                  {req.urgency === 'URGENT' ? '🔴 Mendesak' : '🟢 Normal'}
+                                </span>
+                              </td>
+
+                              <td className="p-3 text-slate-700">
+                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                  {req.items.map((it, i) => (
+                                    <span key={i} className="bg-slate-100 px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-800">
+                                      {it.materialName}: <strong>{it.qtyRequested} {it.unit}</strong>
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+
+                              <td className="p-3">
+                                <span className={`text-[11px] font-black px-2.5 py-1 rounded-xl ${
+                                  req.status === 'PENDING' ? 'bg-amber-100 text-amber-900 animate-pulse' :
+                                  req.status === 'ORDERED' ? 'bg-blue-100 text-blue-900 font-bold' :
+                                  req.status === 'RECEIVED' ? 'bg-emerald-100 text-emerald-900' :
+                                  'bg-rose-100 text-rose-900'
+                                }`}>
+                                  {req.status === 'PENDING' ? '⏳ Menunggu Tindakan' :
+                                   req.status === 'ORDERED' ? '🚚 Sedang Dikirim' :
+                                   req.status === 'RECEIVED' ? '✅ Selesai Diterima' :
+                                   '❌ Ditolak'}
+                                </span>
+                              </td>
+
+                              <td className="p-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenRequestDetail(req.id);
+                                  }}
+                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1 shadow-xs active:scale-95 transition-all cursor-pointer"
+                                >
+                                  <span>Buka Detail PO</span>
+                                  <ChevronRight size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
+
             </div>
-          </div>
+          )}
 
         </div>
       )}
