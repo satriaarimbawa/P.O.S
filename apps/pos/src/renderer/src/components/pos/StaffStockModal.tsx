@@ -14,8 +14,7 @@ import {
   Building2,
   Info,
   Scale,
-  Calendar,
-  AlertCircle
+  Calendar
 } from 'lucide-react';
 import { 
   useInventoryStore, 
@@ -78,14 +77,13 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
   // 3. STATE FORM MENU 3: STOCK OPNAME HARIAN (STOCK TAKING)
   // ==========================================
   const [opnameShift, setOpnameShift] = useState<'Shift 1 (Pagi)' | 'Shift 2 (Malam)' | 'Closing Harian'>('Closing Harian');
-  const [opnameNotes, setOpnameNotes] = useState('');
   const [opnameCounts, setOpnameCounts] = useState<{ [materialId: string]: string }>({});
 
-  // Initialize opname counts (Blind Stock Count: empty by default so staff count physically)
+  // Initialize opname counts (Blind Stock Count: default to '0', no auto-fill)
   useEffect(() => {
     const initial: { [materialId: string]: string } = {};
     materials.forEach(m => {
-      initial[m.id] = m.actualPhysicalStock !== undefined ? String(m.actualPhysicalStock) : '';
+      initial[m.id] = '0';
     });
     setOpnameCounts(initial);
   }, [materials, isOpen]);
@@ -173,18 +171,18 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
     e.preventDefault();
     const numericCounts: { [materialId: string]: number } = {};
     materials.forEach(m => {
-      const val = parseFloat(opnameCounts[m.id]);
+      const val = parseFloat(opnameCounts[m.id] || '0');
       numericCounts[m.id] = isNaN(val) ? 0 : Math.max(0, val);
     });
 
     submitDailyStockTake({
       shiftName: opnameShift,
       conductedBy: user?.name || 'Staff Toko',
-      notes: opnameNotes,
+      notes: '',
       countedStocks: numericCounts,
     });
 
-    showToast('📋 Hasil Stock Opname Harian berhasil disimpan & terintegrasi ke Laporan!');
+    showToast('📋 Hasil Stock Opname Harian berhasil dikirim ke Owner!');
   };
 
   const pendingRequests = stockRequests.filter(r => r.status === 'PENDING').length;
@@ -755,7 +753,7 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                   </div>
                 </div>
 
-                {/* Tabel Input Hitungan Fisik (Blind Count: Tanpa Sisa Sistem & Selisih) */}
+                {/* Tabel Input Hitungan Fisik (Blind Count: Tanpa Sisa Sistem & Selisih, Default 0) */}
                 <div>
                   <label className="block font-bold text-slate-700 mb-2">
                     Input Hasil Hitungan Fisik Riil di Bar:
@@ -784,8 +782,13 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                                     type="number"
                                     min="0"
                                     step="0.05"
-                                    value={opnameCounts[mat.id] !== undefined ? opnameCounts[mat.id] : ''}
+                                    value={opnameCounts[mat.id] !== undefined ? opnameCounts[mat.id] : '0'}
                                     onChange={(e) => handleOpnameCountChange(mat.id, e.target.value)}
+                                    onFocus={(e) => {
+                                      if (e.target.value === '0') {
+                                        handleOpnameCountChange(mat.id, '');
+                                      }
+                                    }}
                                     className="w-28 sm:w-32 text-center p-2 bg-slate-50 border-2 border-slate-200 focus:border-sky-500 rounded-xl font-mono font-black text-slate-900 focus:bg-white outline-none text-xs sm:text-sm"
                                     placeholder="0"
                                   />
@@ -800,18 +803,7 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                   </div>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Catatan Opname (Opsional):</label>
-                  <input
-                    type="text"
-                    value={opnameNotes}
-                    onChange={(e) => setOpnameNotes(e.target.value)}
-                    placeholder="Contoh: Fresh milk tumpah 0.5L saat rush hour siang"
-                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-sky-500/20 outline-none"
-                  />
-                </div>
-
-                <div className="pt-1">
+                <div className="pt-2">
                   <button
                     type="submit"
                     className="w-full py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-sky-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -821,59 +813,6 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                   </button>
                 </div>
               </form>
-
-              {/* Log Riwayat Opname Terakhir (Khusus Staff: Menampilkan Input Fisik Saja) */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                  <span className="font-black text-xs text-slate-800 flex items-center gap-1.5">
-                    <Scale size={15} className="text-slate-500" />
-                    <span>Riwayat Audit Opname Harian Sebelumnya</span>
-                  </span>
-                  <span className="text-[11px] text-slate-500 font-medium">Total: {stockTakeLogs.length} Sesi Audit</span>
-                </div>
-
-                {stockTakeLogs.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
-                    <Scale size={32} className="mx-auto mb-2 opacity-40" />
-                    <p className="text-xs">Belum ada sesi audit opname yang tersimpan.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {stockTakeLogs.slice().reverse().map((log) => (
-                      <div key={log.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-xs text-slate-900">{log.shiftName}</span>
-                            <span className="text-[10px] bg-slate-200 text-slate-800 font-medium px-2 py-0.5 rounded-lg">
-                              Oleh: {log.conductedBy}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-medium">
-                            {new Date(log.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[11px]">
-                          {log.entries.slice(0, 6).map((entry, idx) => (
-                            <div key={idx} className="bg-white border border-slate-200 p-2 rounded-xl">
-                              <span className="font-bold text-slate-800 block truncate">{entry.materialName}</span>
-                              <div className="text-[10px] text-slate-600 font-bold mt-0.5">
-                                Fisik: <span className="text-sky-700 font-black">{entry.actualCountedStock} {entry.unit}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        {log.notes && (
-                          <p className="text-[11px] text-slate-600 italic bg-white p-2 rounded-xl border border-slate-200/70">
-                            "{log.notes}"
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
             </div>
           )}
