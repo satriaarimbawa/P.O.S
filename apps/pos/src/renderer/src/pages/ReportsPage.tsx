@@ -142,7 +142,8 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 p-4 sm:p-6 lg:p-8 font-sans select-none">
+    <div className="h-screen w-full overflow-y-auto bg-slate-100 text-slate-800 p-4 sm:p-6 lg:p-8 font-sans select-none pb-24">
+      <div className="max-w-7xl mx-auto space-y-6">
       
       {/* ======================================================== */}
       {/* 1. HEADER & ACTION CONTROLS                             */}
@@ -666,6 +667,7 @@ export default function ReportsPage() {
 
         </div>
 
+      </div>
       </div>
 
       {/* TOAST FEEDBACK */}

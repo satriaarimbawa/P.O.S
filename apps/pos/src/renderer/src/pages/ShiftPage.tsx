@@ -190,7 +190,7 @@ export default function ShiftPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 sm:p-6 flex flex-col items-center select-none">
+    <div className="h-screen w-full overflow-y-auto bg-slate-100 p-4 sm:p-6 flex flex-col items-center select-none pb-24">
       <div className="w-full max-w-4xl">
         <div className="flex items-center justify-between mb-4">
           <button

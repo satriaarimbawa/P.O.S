@@ -173,7 +173,7 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="h-screen bg-slate-50 flex overflow-hidden">
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-slate-200 p-4 flex flex-col">
         <button onClick={() => navigate('/')} className="flex items-center text-slate-500 hover:text-slate-800 mb-8 font-medium">
