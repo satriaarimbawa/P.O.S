@@ -8,7 +8,7 @@ export interface RawMaterial {
   name: string;
   category: MaterialCategory;
   unit: string; // 'kg', 'Liter', 'Gram', 'Pcs', 'Set'
-  unitCost: number; // HPP per satuan (IDR)
+  unitCost: number; // HPP per satuan (IDR) - dikelola di background untuk laporan Laba Rugi
   startStock: number; // Stok Awal Pembukaan
   stockIn: number; // Total Stok Masuk Hari Ini
   usedSystem: number; // Terpakai Berdasarkan Resep POS
@@ -60,20 +60,68 @@ export interface StockTakeLog {
   totalDeficitCost: number; // Wastage Cost
 }
 
+// ==========================================
+// REQUEST STOK (DARI STAFF POS KE OWNER)
+// ==========================================
+export type StockRequestUrgency = 'NORMAL' | 'URGENT';
+export type StockRequestStatus = 'PENDING' | 'ORDERED' | 'RECEIVED' | 'REJECTED';
+
+export interface StockRequestItem {
+  materialId: string;
+  materialName: string;
+  qtyRequested: number;
+  unit: string;
+  currentStockEstimate: number;
+}
+
+export interface StockRequest {
+  id: string;
+  createdAt: string; // ISO string
+  requestedBy: string; // Nama staff/kasir
+  urgency: StockRequestUrgency; // 'NORMAL' | 'URGENT'
+  notes?: string;
+  items: StockRequestItem[];
+  status: StockRequestStatus; // 'PENDING' | 'ORDERED' | 'RECEIVED' | 'REJECTED'
+  reviewedBy?: string;
+  reviewedAt?: string;
+}
+
 interface InventoryState {
   materials: RawMaterial[];
   stockInLogs: StockInLog[];
   stockTakeLogs: StockTakeLog[];
+  stockRequests: StockRequest[];
   
-  // Actions
+  // Actions Stock In Sederhana (Staff Form - Tanpa Perhitungan Rumit)
+  addStaffStockIn: (data: {
+    supplierName?: string;
+    invoiceNo?: string;
+    receivedBy: string;
+    notes?: string;
+    items: { materialId: string; qty: number }[];
+  }) => void;
+
+  // Actions Stock In Lengkap (dengan custom unit cost jika ada perubahan harga)
   addStockIn: (data: {
     supplierName: string;
     invoiceNo: string;
     receivedBy: string;
     notes?: string;
-    items: { materialId: string; qty: number; unitCost: number }[];
+    items: { materialId: string; qty: number; unitCost?: number }[];
   }) => void;
 
+  // Actions Request Stock (Staff ke Owner)
+  createStockRequest: (data: {
+    requestedBy: string;
+    urgency: StockRequestUrgency;
+    notes?: string;
+    items: { materialId: string; qtyRequested: number }[];
+  }) => StockRequest;
+
+  updateStockRequestStatus: (requestId: string, status: StockRequestStatus, reviewedBy?: string) => void;
+  fulfillStockRequest: (requestId: string, receivedBy: string) => void;
+
+  // Actions Daily Stock Taking (Opname)
   submitDailyStockTake: (data: {
     shiftName: string;
     conductedBy: string;
@@ -179,7 +227,7 @@ export const INITIAL_STOCK_IN_LOGS: StockInLog[] = [
     id: 'in_101',
     date: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
     supplierName: 'Cimory Fresh Dairy Hub',
-    invoiceNo: 'INV-CMR-8821',
+    invoiceNo: 'SJ-CMR-8821',
     receivedBy: 'Sari N. (Barista)',
     notes: 'Pengiriman Fresh Milk batch pagi dingin tersegel',
     items: [
@@ -193,6 +241,52 @@ export const INITIAL_STOCK_IN_LOGS: StockInLog[] = [
       }
     ],
     totalAmount: 220000,
+  }
+];
+
+export const INITIAL_STOCK_REQUESTS: StockRequest[] = [
+  {
+    id: 'req_201',
+    createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+    requestedBy: 'Sari N. (Barista)',
+    urgency: 'URGENT',
+    notes: 'Biji Kopi Blend sisa 3 kg, perkiraan malam ini habis karena weekend rush',
+    status: 'PENDING',
+    items: [
+      {
+        materialId: 'mat_1',
+        materialName: 'Biji Kopi House Blend (Espresso)',
+        qtyRequested: 10,
+        unit: 'kg',
+        currentStockEstimate: 3.1,
+      },
+      {
+        materialId: 'mat_2',
+        materialName: 'Fresh Milk Pasteurisasi',
+        qtyRequested: 20,
+        unit: 'Liter',
+        currentStockEstimate: 15.0,
+      }
+    ]
+  },
+  {
+    id: 'req_200',
+    createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+    requestedBy: 'Budi K. (Kasir)',
+    urgency: 'NORMAL',
+    notes: 'Restock mingguan Cup & Straw',
+    status: 'ORDERED',
+    reviewedBy: 'Owner / Manager',
+    reviewedAt: new Date(Date.now() - 18 * 3600 * 1000).toISOString(),
+    items: [
+      {
+        materialId: 'mat_7',
+        materialName: 'Cup PET 16oz + Lid + Paper Straw',
+        qtyRequested: 200,
+        unit: 'Set',
+        currentStockEstimate: 168,
+      }
+    ]
   }
 ];
 
@@ -240,20 +334,20 @@ export const useInventoryStore = create<InventoryState>()(
       materials: INITIAL_RAW_MATERIALS,
       stockInLogs: INITIAL_STOCK_IN_LOGS,
       stockTakeLogs: INITIAL_STOCK_TAKE_LOGS,
+      stockRequests: INITIAL_STOCK_REQUESTS,
 
-      addStockIn: ({ supplierName, invoiceNo, receivedBy, notes, items }) => {
+      // Simple Staff Stock In (Tanpa perlu input harga/perhitungan)
+      addStaffStockIn: ({ supplierName, invoiceNo, receivedBy, notes, items }) => {
         const state = get();
         const fullItems: StockInItem[] = [];
         let totalAmount = 0;
-
-        // Clone current materials
         const updatedMaterials = [...state.materials];
 
         items.forEach((itemInput) => {
           const matIndex = updatedMaterials.findIndex((m) => m.id === itemInput.materialId);
           if (matIndex !== -1) {
             const mat = updatedMaterials[matIndex];
-            const subtotal = itemInput.qty * itemInput.unitCost;
+            const subtotal = itemInput.qty * mat.unitCost;
             totalAmount += subtotal;
 
             fullItems.push({
@@ -261,16 +355,63 @@ export const useInventoryStore = create<InventoryState>()(
               materialName: mat.name,
               qty: itemInput.qty,
               unit: mat.unit,
-              unitCost: itemInput.unitCost,
+              unitCost: mat.unitCost,
               subtotal,
             });
 
-            // Update material stock & cost
             updatedMaterials[matIndex] = {
               ...mat,
               stockIn: Number((mat.stockIn + itemInput.qty).toFixed(2)),
               actualPhysicalStock: Number((mat.actualPhysicalStock + itemInput.qty).toFixed(2)),
-              unitCost: itemInput.unitCost > 0 ? itemInput.unitCost : mat.unitCost,
+            };
+          }
+        });
+
+        const newLog: StockInLog = {
+          id: `in_${Date.now()}`,
+          date: new Date().toISOString(),
+          supplierName: supplierName?.trim() || 'Supplier Langganan',
+          invoiceNo: invoiceNo?.trim() || `SJ-${Date.now().toString().slice(-5)}`,
+          receivedBy: receivedBy.trim() || 'Staff Toko',
+          notes: notes?.trim() || undefined,
+          items: fullItems,
+          totalAmount,
+        };
+
+        set({
+          materials: updatedMaterials,
+          stockInLogs: [newLog, ...state.stockInLogs],
+        });
+      },
+
+      addStockIn: ({ supplierName, invoiceNo, receivedBy, notes, items }) => {
+        const state = get();
+        const fullItems: StockInItem[] = [];
+        let totalAmount = 0;
+        const updatedMaterials = [...state.materials];
+
+        items.forEach((itemInput) => {
+          const matIndex = updatedMaterials.findIndex((m) => m.id === itemInput.materialId);
+          if (matIndex !== -1) {
+            const mat = updatedMaterials[matIndex];
+            const cost = itemInput.unitCost !== undefined && itemInput.unitCost > 0 ? itemInput.unitCost : mat.unitCost;
+            const subtotal = itemInput.qty * cost;
+            totalAmount += subtotal;
+
+            fullItems.push({
+              materialId: mat.id,
+              materialName: mat.name,
+              qty: itemInput.qty,
+              unit: mat.unit,
+              unitCost: cost,
+              subtotal,
+            });
+
+            updatedMaterials[matIndex] = {
+              ...mat,
+              stockIn: Number((mat.stockIn + itemInput.qty).toFixed(2)),
+              actualPhysicalStock: Number((mat.actualPhysicalStock + itemInput.qty).toFixed(2)),
+              unitCost: cost,
             };
           }
         });
@@ -290,6 +431,91 @@ export const useInventoryStore = create<InventoryState>()(
           materials: updatedMaterials,
           stockInLogs: [newLog, ...state.stockInLogs],
         });
+      },
+
+      createStockRequest: ({ requestedBy, urgency, notes, items }) => {
+        const state = get();
+        const fullItems: StockRequestItem[] = [];
+
+        items.forEach((itemInput) => {
+          const mat = state.materials.find((m) => m.id === itemInput.materialId);
+          if (mat) {
+            const currentEstimate = Number((mat.startStock + mat.stockIn - mat.usedSystem).toFixed(2));
+            fullItems.push({
+              materialId: mat.id,
+              materialName: mat.name,
+              qtyRequested: itemInput.qtyRequested,
+              unit: mat.unit,
+              currentStockEstimate: currentEstimate,
+            });
+          }
+        });
+
+        const newRequest: StockRequest = {
+          id: `req_${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          requestedBy: requestedBy.trim() || 'Staff POS',
+          urgency,
+          notes: notes?.trim() || undefined,
+          items: fullItems,
+          status: 'PENDING',
+        };
+
+        set({
+          stockRequests: [newRequest, ...state.stockRequests],
+        });
+
+        return newRequest;
+      },
+
+      updateStockRequestStatus: (requestId, status, reviewedBy) => {
+        set((state) => ({
+          stockRequests: state.stockRequests.map((req) =>
+            req.id === requestId
+              ? {
+                  ...req,
+                  status,
+                  reviewedBy: reviewedBy || req.reviewedBy,
+                  reviewedAt: new Date().toISOString(),
+                }
+              : req
+          ),
+        }));
+      },
+
+      fulfillStockRequest: (requestId, receivedBy) => {
+        const state = get();
+        const request = state.stockRequests.find((r) => r.id === requestId);
+        if (!request) return;
+
+        // Auto convert requested items into Stock In
+        const stockInItems = request.items.map((i) => ({
+          materialId: i.materialId,
+          qty: i.qtyRequested,
+        }));
+
+        // Trigger staff stock in
+        state.addStaffStockIn({
+          supplierName: 'Supplier (Fulfill Request #' + request.id.slice(-4) + ')',
+          invoiceNo: `REQ-FULFILL-${request.id.slice(-4)}`,
+          receivedBy,
+          notes: `Penerimaan barang dari pengajuan staff: ${request.requestedBy} (${request.notes || '-'})`,
+          items: stockInItems,
+        });
+
+        // Set request status to RECEIVED
+        set((s) => ({
+          stockRequests: s.stockRequests.map((r) =>
+            r.id === requestId
+              ? {
+                  ...r,
+                  status: 'RECEIVED',
+                  reviewedBy: receivedBy,
+                  reviewedAt: new Date().toISOString(),
+                }
+              : r
+          ),
+        }));
       },
 
       submitDailyStockTake: ({ shiftName, conductedBy, notes, countedStocks }) => {
@@ -386,6 +612,7 @@ export const useInventoryStore = create<InventoryState>()(
           materials: INITIAL_RAW_MATERIALS,
           stockInLogs: INITIAL_STOCK_IN_LOGS,
           stockTakeLogs: INITIAL_STOCK_TAKE_LOGS,
+          stockRequests: INITIAL_STOCK_REQUESTS,
         });
       },
     }),

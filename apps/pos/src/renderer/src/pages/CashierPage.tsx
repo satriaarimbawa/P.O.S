@@ -20,13 +20,15 @@ import {
   Scan,
   ShoppingBag,
   ArrowRight,
-  PlayCircle
+  PlayCircle,
+  Package
 } from 'lucide-react';
 import MenuGrid from '../components/pos/MenuGrid';
 import OrderPanel from '../components/pos/OrderPanel';
 import ModifierModal, { ProductItem } from '../components/pos/ModifierModal';
 import PaymentDialog, { PaymentSuccessResult } from '../components/pos/PaymentDialog';
 import PrinterStatusModal from '../components/pos/PrinterStatusModal';
+import StaffStockModal from '../components/pos/StaffStockModal';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useHardwareStore } from '../stores/useHardwareStore';
 import { useCartStore } from '../stores/useCartStore';
@@ -55,9 +57,10 @@ export default function CashierPage() {
   const [managerPin, setManagerPin] = useState('');
   const [managerPinError, setManagerPinError] = useState('');
   
-  // Architecture Info & Printer Modal State
+  // Architecture Info, Printer & Staff Stock Modal State
   const [showArchInfo, setShowArchInfo] = useState(false);
   const [showPrinterModal, setShowPrinterModal] = useState(false);
+  const [showStaffStockModal, setShowStaffStockModal] = useState(false);
 
   const navigate = useNavigate();
   const { user, activeShift, setActiveShift, logout } = useAuthStore();
@@ -299,7 +302,18 @@ export default function CashierPage() {
             )}
           </button>
 
-          {/* 2. KDS Barista Display */}
+          {/* 2. TOMBOL STOK & REQUEST BAHAN (STAFF / BARISTA) */}
+          <button
+            type="button"
+            onClick={() => setShowStaffStockModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-950/80 text-indigo-200 border border-indigo-500/40 hover:bg-indigo-900 hover:text-white transition-all shadow-xs active:scale-95"
+            title="Catat Stok Masuk & Ajukan Request Stok ke Owner"
+          >
+            <Package className="w-4 h-4 text-indigo-400" />
+            <span className="hidden sm:inline">📦 Stok & Request</span>
+          </button>
+
+          {/* 3. KDS Barista Display */}
           <button
             type="button"
             onClick={() => navigate('/kitchen')}
@@ -769,6 +783,12 @@ export default function CashierPage() {
           </div>
         </div>
       )}
+
+      {/* STAFF STOCK & REQUEST MODAL */}
+      <StaffStockModal
+        isOpen={showStaffStockModal}
+        onClose={() => setShowStaffStockModal(false)}
+      />
 
     </div>
   );

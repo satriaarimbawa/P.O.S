@@ -34,7 +34,10 @@ import {
   Trash2,
   Check,
   Building2,
-  CalendarDays
+  CalendarDays,
+  Send,
+  XCircle,
+  Clock3
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -53,7 +56,7 @@ import {
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
-import { useInventoryStore, RawMaterial } from '../stores/useInventoryStore';
+import { useInventoryStore, RawMaterial, StockRequest } from '../stores/useInventoryStore';
 
 // ==========================================
 // 1. DATA ANALITIK PENJUALAN MOCK
@@ -116,7 +119,10 @@ export default function ReportsPage() {
     materials, 
     stockInLogs, 
     stockTakeLogs, 
-    addStockIn, 
+    stockRequests,
+    addStaffStockIn,
+    updateStockRequestStatus,
+    fulfillStockRequest,
     submitDailyStockTake 
   } = useInventoryStore();
 
@@ -133,14 +139,14 @@ export default function ReportsPage() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // ==========================================
-  // STATE INPUT STOK MASUK (STOCK IN)
+  // STATE INPUT STOK MASUK SEDERHANA (STAFF / OWNER)
   // ==========================================
   const [supplierName, setSupplierName] = useState('');
   const [invoiceNo, setInvoiceNo] = useState('');
-  const [receiverName, setReceiverName] = useState(user?.name || 'Sari N. (Store Manager)');
+  const [receiverName, setReceiverName] = useState(user?.name || 'Sari N. (Store Staff)');
   const [stockInNotes, setStockInNotes] = useState('');
-  const [stockInItems, setStockInItems] = useState<{ materialId: string; qty: number; unitCost: number }[]>([
-    { materialId: materials[0]?.id || 'mat_1', qty: 5, unitCost: materials[0]?.unitCost || 160000 }
+  const [stockInItems, setStockInItems] = useState<{ materialId: string; qty: number }[]>([
+    { materialId: materials[0]?.id || 'mat_1', qty: 5 }
   ]);
 
   // ==========================================
@@ -151,7 +157,6 @@ export default function ReportsPage() {
   const [stockTakeNotes, setStockTakeNotes] = useState('');
   const [tempCountedStocks, setTempCountedStocks] = useState<{ [materialId: string]: string }>({});
 
-  // Inisialisasi input stock take dari actualPhysicalStock saat pertama kali load
   useEffect(() => {
     const initialCounts: { [materialId: string]: string } = {};
     materials.forEach((mat) => {
@@ -171,7 +176,6 @@ export default function ReportsPage() {
   const discounts = 150000;
   const netRevenue = grossSales - discounts; // Rp 4.520.000
 
-  // Hitung HPP Teoretis (Resep POS) & Kerugian Selisih Stok (Wastage) dari Store
   let theoreticalCOGS = 0;
   let totalWastageCost = 0;
   let totalRemainingSystemValue = 0;
@@ -197,16 +201,14 @@ export default function ReportsPage() {
   const grossProfit = netRevenue - actualTotalCOGS;
   const grossProfitMargin = ((grossProfit / netRevenue) * 100).toFixed(1);
 
-  // Beban Operasional Harian (OPEX Estimasi)
-  const opexSalaries = 450000; // Gaji barista & kasir (alokasi harian)
-  const opexUtilities = 120000; // Listrik, gas mesin espresso, air
-  const opexMaintenance = 50000; // Pemeliharaan alat & kebersihan
+  const opexSalaries = 450000;
+  const opexUtilities = 120000;
+  const opexMaintenance = 50000;
   const totalOPEX = opexSalaries + opexUtilities + opexMaintenance; // Rp 620.000
 
   const netProfit = grossProfit - totalOPEX;
   const netProfitMargin = ((netProfit / netRevenue) * 100).toFixed(1);
 
-  // P&L Waterfall Chart Data
   const PNL_CHART_DATA = [
     { name: '1. Omset Bersih', value: netRevenue, color: '#10b981' },
     { name: '2. HPP Resep POS', value: -theoreticalCOGS, color: '#f59e0b' },
@@ -216,39 +218,32 @@ export default function ReportsPage() {
     { name: '6. Laba Bersih', value: netProfit, color: '#0ea5e9' },
   ];
 
+  const pendingRequestsCount = stockRequests.filter(r => r.status === 'PENDING').length;
+
   // ==========================================
-  // HANDLER AKSI
+  // HANDLERS
   // ==========================================
 
-  // 1. Tambah Baris Bahan di Stok Masuk
   const handleAddStockInRow = () => {
     setStockInItems(prev => [
       ...prev,
-      { materialId: materials[0]?.id || 'mat_1', qty: 1, unitCost: materials[0]?.unitCost || 0 }
+      { materialId: materials[0]?.id || 'mat_1', qty: 1 }
     ]);
   };
 
-  // 2. Hapus Baris Bahan di Stok Masuk
   const handleRemoveStockInRow = (index: number) => {
     setStockInItems(prev => prev.filter((_, idx) => idx !== index));
   };
 
-  // 3. Simpan Formulir Stok Masuk
+  // Simpan Stok Masuk Sederhana (Tanpa Perhitungan Uang)
   const handleSubmitStockIn = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplierName.trim()) {
-      setToastMsg('⚠️ Mohon isi Nama Supplier pengirim bahan.');
-      setTimeout(() => setToastMsg(null), 3000);
-      return;
-    }
-
     if (stockInItems.length === 0) {
-      setToastMsg('⚠️ Tambahkan minimal 1 jenis bahan baku yang masuk.');
+      setToastMsg('⚠️ Tambahkan minimal 1 bahan baku yang diterima.');
       setTimeout(() => setToastMsg(null), 3000);
       return;
     }
 
-    // Validasi Qty > 0
     const hasInvalidQty = stockInItems.some(i => i.qty <= 0);
     if (hasInvalidQty) {
       setToastMsg('⚠️ Jumlah Qty masuk harus lebih dari 0.');
@@ -256,25 +251,23 @@ export default function ReportsPage() {
       return;
     }
 
-    addStockIn({
-      supplierName,
+    addStaffStockIn({
+      supplierName: supplierName || 'Supplier Langganan',
       invoiceNo,
       receivedBy: receiverName,
       notes: stockInNotes,
       items: stockInItems,
     });
 
-    // Reset Form
     setSupplierName('');
     setInvoiceNo('');
     setStockInNotes('');
-    setStockInItems([{ materialId: materials[0]?.id || 'mat_1', qty: 5, unitCost: materials[0]?.unitCost || 160000 }]);
+    setStockInItems([{ materialId: materials[0]?.id || 'mat_1', qty: 5 }]);
 
-    setToastMsg('✅ Stok Masuk berhasil dicatat & stok bahan langsung bertambah!');
+    setToastMsg('✅ Stok masuk berhasil dicatat & stok bahan langsung bertambah!');
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  // 4. Quick Fill Sisa Sistem untuk Opname Harian
   const handleQuickFillSystemStock = () => {
     const filled: { [materialId: string]: string } = {};
     materials.forEach((mat) => {
@@ -286,7 +279,6 @@ export default function ReportsPage() {
     setTimeout(() => setToastMsg(null), 2500);
   };
 
-  // 5. Simpan Hasil Daily Stock Taking (Opname)
   const handleSubmitDailyStockTake = () => {
     const parsedCounts: { [materialId: string]: number } = {};
     for (const mat of materials) {
@@ -300,7 +292,7 @@ export default function ReportsPage() {
       parsedCounts[mat.id] = val;
     }
 
-    const log = submitDailyStockTake({
+    submitDailyStockTake({
       shiftName,
       conductedBy: conductorName,
       notes: stockTakeNotes,
@@ -311,7 +303,6 @@ export default function ReportsPage() {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  // 6. Handler Export CSV
   const handleExportCSV = () => {
     if (activeTab === 'sales') {
       const csvContent = "data:text/csv;charset=utf-8," 
@@ -476,7 +467,7 @@ export default function ReportsPage() {
           <span>📈 Penjualan & Jam Sibuk</span>
         </button>
 
-        {/* Tab 2: Input Stok Masuk (Stock In) */}
+        {/* Tab 2: Permintaan & Stok Masuk */}
         <button
           onClick={() => setActiveTab('stock-in')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm transition-all ${
@@ -486,10 +477,10 @@ export default function ReportsPage() {
           }`}
         >
           <Truck size={16} />
-          <span>📥 Input Stok Masuk (Stock In)</span>
-          {stockInLogs.length > 0 && (
-            <span className="bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
-              {stockInLogs.length} Faktur
+          <span>📥 Stok Masuk & Request Staff</span>
+          {pendingRequestsCount > 0 && (
+            <span className="bg-amber-500 text-slate-950 text-[10px] px-2 py-0.5 rounded-full font-black animate-pulse">
+              {pendingRequestsCount} Request Baru
             </span>
           )}
         </button>
@@ -536,10 +527,8 @@ export default function ReportsPage() {
       {activeTab === 'sales' && (
         <div className="space-y-6 animate-fade-in">
           
-          {/* EXECUTIVE KPI CARDS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
-            {/* Net Revenue */}
             <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs relative overflow-hidden group hover:border-indigo-300 transition-all">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Omset Penjualan Bersih</span>
@@ -556,7 +545,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Total Orders */}
             <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs relative overflow-hidden group hover:border-emerald-300 transition-all">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Transaksi</span>
@@ -572,7 +560,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Gross Profit & Margin */}
             <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs relative overflow-hidden group hover:border-amber-300 transition-all">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Estimasi Laba Kotor (GP)</span>
@@ -588,7 +575,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Non-Cash Share */}
             <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs relative overflow-hidden group hover:border-blue-300 transition-all">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Adopsi Non-Tunai</span>
@@ -609,7 +595,6 @@ export default function ReportsPage() {
           {/* CHARTS GRID */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* HOURLY SALES AREA CHART (2 COLS) */}
             <div className="lg:col-span-2 bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 gap-3">
                 <div>
@@ -684,7 +669,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* CATEGORY SHARE DONUT PIE CHART (1 COL) */}
             <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
@@ -739,10 +723,9 @@ export default function ReportsPage() {
 
           </div>
 
-          {/* LEADERBOARD & SHIFT CASH RECONCILIATION */}
+          {/* LEADERBOARD */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* TOP 8 BEST SELLERS (2 COLS) */}
             <div className="lg:col-span-2 bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs">
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
                 <div>
@@ -801,7 +784,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* AUDIT SHIFT KASIR (1 COL) */}
             <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-100">
@@ -858,241 +840,273 @@ export default function ReportsPage() {
       )}
 
       {/* ======================================================== */}
-      {/* TAB 2: INPUT STOK MASUK (STOCK IN / RECEIVING)           */}
+      {/* TAB 2: STOK MASUK & PERMINTAAN STOK DARI STAFF           */}
       {/* ======================================================== */}
       {activeTab === 'stock-in' && (
         <div className="space-y-6 animate-fade-in">
           
-          {/* FORMULIR PENERIMAAN STOK DARI SUPPLIER */}
+          {/* 1. SECTION DAFTAR PERMINTAAN STOK DARI STAFF (REQUEST STOCK) */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-100">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
               <div>
                 <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <Truck size={22} className="text-indigo-600" />
-                  Formulir Penerimaan Stok Masuk (Stock In)
+                  <Send size={20} className="text-indigo-600" />
+                  Permintaan Stok Bahan dari Staff POS (Stock Requests)
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Input surat jalan & faktur pembelian bahan baku dari supplier untuk menambah stok aktif
+                  Staff mengajukan kebutuhan stok riil dari bar sehingga Owner tidak perlu menerka pesanan
                 </p>
               </div>
+
               <span className="text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl">
-                📦 Belanja Bahan Hari Ini: <strong>Rp {totalPurchasesToday.toLocaleString('id-ID')}</strong>
+                {pendingRequestsCount} Permintaan Menunggu Tindakan
               </span>
             </div>
 
-            <form onSubmit={handleSubmitStockIn} className="space-y-6">
-              
-              {/* Header Info Supplier & Faktur */}
+            <div className="space-y-3">
+              {stockRequests.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs">
+                  <Package size={32} className="mx-auto mb-2 opacity-50" />
+                  <p>Tidak ada pengajuan permintaan stok dari staff saat ini.</p>
+                </div>
+              ) : (
+                stockRequests.map((req) => (
+                  <div key={req.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 text-xs">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-2 border-b border-slate-200/60">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-slate-900 text-sm">Request #{req.id.slice(-4)}</span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          req.urgency === 'URGENT' ? 'bg-rose-100 text-rose-800 animate-pulse' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          {req.urgency === 'URGENT' ? '🔴 Mendesak (Habis Hari Ini)' : '🟢 Normal (Restock Rutin)'}
+                        </span>
+                        <span className="text-slate-400 font-mono text-[11px]">
+                          {new Date(req.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB
+                        </span>
+                      </div>
+
+                      <span className={`text-xs font-black px-3 py-1 rounded-xl ${
+                        req.status === 'PENDING' ? 'bg-amber-100 text-amber-900' :
+                        req.status === 'ORDERED' ? 'bg-blue-100 text-blue-900' :
+                        req.status === 'RECEIVED' ? 'bg-emerald-100 text-emerald-900' :
+                        'bg-rose-100 text-rose-900'
+                      }`}>
+                        {req.status === 'PENDING' ? '⏳ Menunggu Persetujuan Owner' :
+                         req.status === 'ORDERED' ? '🚚 Sudah Dipesankan ke Supplier' :
+                         req.status === 'RECEIVED' ? '✅ Barang Sudah Diterima & Masuk Stok' :
+                         '❌ Ditolak'}
+                      </span>
+                    </div>
+
+                    {/* Items requested */}
+                    <div className="flex flex-wrap gap-2">
+                      {req.items.map((item, i) => (
+                        <div key={i} className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl flex items-center gap-2">
+                          <span className="font-bold text-slate-900">{item.materialName}:</span>
+                          <span className="bg-indigo-50 text-indigo-700 font-black px-2 py-0.5 rounded-lg">
+                            Minta: {item.qtyRequested} {item.unit}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            (Sisa di bar saat req: {item.currentStockEstimate} {item.unit})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {req.notes && (
+                      <p className="text-slate-600 italic bg-white/70 p-2.5 rounded-xl border border-slate-200/60">
+                        Catatan Staff: "<strong>{req.notes}</strong>" — <em>Diajukan oleh {req.requestedBy}</em>
+                      </p>
+                    )}
+
+                    {/* OWNER ACTION CONTROLS */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-200/60">
+                      <span className="text-[11px] text-slate-400">
+                        Status saat ini: <strong>{req.status}</strong> {req.reviewedBy ? `(Diperiksa oleh: ${req.reviewedBy})` : ''}
+                      </span>
+
+                      <div className="flex items-center gap-2">
+                        {req.status === 'PENDING' && (
+                          <>
+                            <button
+                              onClick={() => {
+                                updateStockRequestStatus(req.id, 'REJECTED', user?.name || 'Owner');
+                                setToastMsg('❌ Request stok ditolak.');
+                                setTimeout(() => setToastMsg(null), 2500);
+                              }}
+                              className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 font-bold rounded-xl border border-slate-300 transition-colors"
+                            >
+                              Tolak
+                            </button>
+                            <button
+                              onClick={() => {
+                                updateStockRequestStatus(req.id, 'ORDERED', user?.name || 'Owner');
+                                setToastMsg('🚚 Status request diubah: Sudah Dipesankan ke Supplier!');
+                                setTimeout(() => setToastMsg(null), 2500);
+                              }}
+                              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-xs active:scale-95"
+                            >
+                              Setujui & Order ke Supplier
+                            </button>
+                          </>
+                        )}
+
+                        {req.status === 'ORDERED' && (
+                          <button
+                            onClick={() => {
+                              fulfillStockRequest(req.id, user?.name || 'Owner');
+                              setToastMsg('🎉 Barang diterima & otomatis ditambahkan ke stok aktif!');
+                              setTimeout(() => setToastMsg(null), 3000);
+                            }}
+                            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20 active:scale-95 flex items-center gap-1.5"
+                          >
+                            <CheckCircle2 size={14} />
+                            <span>Konfirmasi Barang Sampai (Stock In)</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* 2. FORMULIR STOK MASUK SEDERHANA */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <Truck size={20} className="text-emerald-600" />
+                  Pencatatan Cepat Barang Masuk (Staff / Non-Request)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Cukup isi jumlah barang fisik yang diterima tanpa perlu perhitungan harga atau HPP
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitStockIn} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Nama Supplier / Vendor: <span className="text-rose-500">*</span>
-                  </label>
+                  <label className="block font-bold text-slate-700 mb-1">Nama Supplier / Pengirim:</label>
                   <input
                     type="text"
-                    required
                     value={supplierName}
                     onChange={(e) => setSupplierName(e.target.value)}
                     placeholder="Contoh: PT Nusa Roastery / Cimory"
-                    className="w-full text-xs font-bold p-3 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900"
+                    className="w-full text-xs font-bold p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none"
                   />
-                  {/* Quick suggestions */}
-                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                    {['PT Nusa Roastery', 'Cimory Fresh Dairy', 'Toffin Sirup', 'Indo Packaging'].map((sup) => (
-                      <button
-                        type="button"
-                        key={sup}
-                        onClick={() => setSupplierName(sup)}
-                        className="text-[10px] bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 px-2 py-0.5 rounded-lg border border-slate-200 font-semibold"
-                      >
-                        +{sup}
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Nomor Faktur / Surat Jalan (PO):
-                  </label>
+                  <label className="block font-bold text-slate-700 mb-1">No Surat Jalan (Opsional):</label>
                   <input
                     type="text"
                     value={invoiceNo}
                     onChange={(e) => setInvoiceNo(e.target.value)}
-                    placeholder="Contoh: INV-PO-202609-01"
-                    className="w-full text-xs font-mono font-bold p-3 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900"
+                    placeholder="Contoh: SJ-2026-09"
+                    className="w-full text-xs font-mono font-bold p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Nama Penerima (Staff / Manager):
-                  </label>
+                  <label className="block font-bold text-slate-700 mb-1">Nama Petugas Penerima:</label>
                   <input
                     type="text"
                     value={receiverName}
                     onChange={(e) => setReceiverName(e.target.value)}
-                    placeholder="Nama Staff Penerima"
-                    className="w-full text-xs font-bold p-3 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900"
+                    className="w-full text-xs font-bold p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none text-slate-900"
                   />
                 </div>
-
               </div>
 
-              {/* Tabel Item Bahan Masuk */}
+              {/* Daftar Bahan Masuk */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-black uppercase text-slate-700 tracking-wider">
-                    Daftar Bahan Baku yang Diterima:
-                  </label>
+                  <label className="font-bold text-slate-700">Daftar Bahan yang Diterima:</label>
                   <button
                     type="button"
                     onClick={handleAddStockInRow}
-                    className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200 active:scale-95 transition-all"
+                    className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200"
                   >
-                    <Plus size={14} />
-                    <span>Tambah Baris Bahan</span>
+                    <Plus size={13} /> Tambah Baris Bahan
                   </button>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {stockInItems.map((item, idx) => {
                     const selectedMat = materials.find(m => m.id === item.materialId) || materials[0];
-                    const subtotal = item.qty * item.unitCost;
 
                     return (
-                      <div key={idx} className="flex flex-col sm:flex-row items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                        
-                        {/* Pilih Bahan */}
-                        <div className="flex-1 w-full">
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1">Nama Bahan Baku:</label>
+                      <div key={idx} className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-2xl">
+                        <div className="flex-1">
                           <select
                             value={item.materialId}
                             onChange={(e) => {
-                              const newMatId = e.target.value;
-                              const found = materials.find(m => m.id === newMatId);
-                              setStockInItems(prev => prev.map((it, i) => i === idx ? {
-                                ...it,
-                                materialId: newMatId,
-                                unitCost: found ? found.unitCost : it.unitCost,
-                              } : it));
+                              const newId = e.target.value;
+                              setStockInItems(prev => prev.map((it, i) => i === idx ? { ...it, materialId: newId } : it));
                             }}
-                            className="w-full text-xs font-bold p-2.5 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900"
+                            className="w-full text-xs font-bold p-2 bg-white border border-slate-300 rounded-xl text-slate-900"
                           >
                             {materials.map((m) => (
                               <option key={m.id} value={m.id}>
-                                {m.name} ({m.unit}) - HPP Default: Rp {m.unitCost.toLocaleString('id-ID')}
+                                {m.name} ({m.unit})
                               </option>
                             ))}
                           </select>
                         </div>
 
-                        {/* Jumlah Qty Masuk */}
-                        <div className="w-full sm:w-36">
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                            Qty Masuk ({selectedMat?.unit}):
-                          </label>
+                        <div className="w-36 flex items-center gap-1">
                           <input
                             type="number"
-                            step="0.01"
-                            min="0.01"
+                            min="0.1"
+                            step="0.1"
                             value={item.qty}
                             onChange={(e) => {
                               const val = parseFloat(e.target.value) || 0;
                               setStockInItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: val } : it));
                             }}
-                            className="w-full text-xs font-mono font-bold p-2.5 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900"
+                            className="w-full text-xs font-mono font-black p-2 bg-white border border-slate-300 rounded-xl text-slate-900 text-center"
+                            placeholder="Qty"
                           />
+                          <span className="text-[10px] font-bold text-slate-500">{selectedMat?.unit}</span>
                         </div>
 
-                        {/* Harga Beli Satuan (HPP Aktual) */}
-                        <div className="w-full sm:w-44">
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                            Harga Beli (Rp / {selectedMat?.unit}):
-                          </label>
-                          <input
-                            type="number"
-                            step="100"
-                            min="0"
-                            value={item.unitCost}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value, 10) || 0;
-                              setStockInItems(prev => prev.map((it, i) => i === idx ? { ...it, unitCost: val } : it));
-                            }}
-                            className="w-full text-xs font-mono font-bold p-2.5 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900"
-                          />
-                        </div>
-
-                        {/* Subtotal */}
-                        <div className="w-full sm:w-40 text-right sm:pt-4">
-                          <span className="text-[10px] text-slate-400 font-bold block sm:hidden">Subtotal:</span>
-                          <span className="font-mono font-black text-indigo-950 text-xs sm:text-sm">
-                            Rp {subtotal.toLocaleString('id-ID')}
-                          </span>
-                        </div>
-
-                        {/* Tombol Hapus Baris */}
                         {stockInItems.length > 1 && (
                           <button
                             type="button"
                             onClick={() => handleRemoveStockInRow(idx)}
-                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors sm:mt-4"
-                            title="Hapus Baris"
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg"
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={15} />
                           </button>
                         )}
-
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Catatan & Tombol Simpan */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
-                <div className="w-full sm:max-w-md">
-                  <input
-                    type="text"
-                    value={stockInNotes}
-                    onChange={(e) => setStockInNotes(e.target.value)}
-                    placeholder="Catatan pengiriman / kondisi fisik kemasan..."
-                    className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:outline-none text-slate-800"
-                  />
-                </div>
-
-                <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase block">Total Faktur Pembelian</span>
-                    <span className="font-mono text-lg font-black text-slate-900">
-                      Rp {stockInItems.reduce((acc, it) => acc + (it.qty * it.unitCost), 0).toLocaleString('id-ID')}
-                    </span>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-6 py-3.5 rounded-2xl shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
-                  >
-                    <Check size={16} />
-                    <span>Simpan Penerimaan Stok</span>
-                  </button>
-                </div>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 py-2.5 rounded-2xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                >
+                  Simpan Barang Masuk
+                </button>
               </div>
-
             </form>
           </div>
 
-          {/* RIWAYAT SURAT JALAN & FAKTUR PEMBELIAN STOK */}
+          {/* 3. RIWAYAT STOK MASUK */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
-              <div>
-                <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
-                  <FileText size={18} className="text-indigo-600" />
-                  Riwayat Surat Jalan & Pembelian Stok Masuk
-                </h3>
-                <p className="text-xs text-slate-500">Daftar penerimaan barang yang telah dicatat ke sistem</p>
-              </div>
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+              <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
+                <FileText size={18} className="text-indigo-600" />
+                Riwayat Surat Jalan & Pembelian Stok Masuk
+              </h3>
             </div>
 
             <div className="overflow-x-auto">
@@ -1104,7 +1118,7 @@ export default function ReportsPage() {
                     <th className="p-3">No Surat Jalan / PO</th>
                     <th className="p-3">Rincian Bahan Masuk</th>
                     <th className="p-3">Penerima</th>
-                    <th className="p-3 text-right">Total Biaya (IDR)</th>
+                    <th className="p-3 text-right">Nilai Pembelian (IDR)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
@@ -1150,7 +1164,6 @@ export default function ReportsPage() {
       {activeTab === 'stock-take' && (
         <div className="space-y-6 animate-fade-in">
           
-          {/* DAILY STOCK TAKING FORM & INPUT TABLE */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-6 border-b border-slate-100 gap-4">
               <div>
@@ -1168,7 +1181,6 @@ export default function ReportsPage() {
                   type="button"
                   onClick={handleQuickFillSystemStock}
                   className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border border-slate-200 active:scale-95"
-                  title="Isi seluruh input dengan nilai sisa sistem"
                 >
                   <RefreshCw size={14} />
                   <span>⚡ Quick Fill Sisa Sistem</span>
@@ -1185,14 +1197,13 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Shift & Conductor Header Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
               <div>
                 <label className="block font-bold text-slate-600 mb-1">Nama Sesi / Shift:</label>
                 <select
                   value={shiftName}
                   onChange={(e) => setShiftName(e.target.value)}
-                  className="w-full font-bold p-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full font-bold p-2 bg-white border border-slate-300 rounded-xl focus:outline-none"
                 >
                   <option value="Shift 1 (Pagi)">Shift 1 (Pagi) • 07:00 - 15:00</option>
                   <option value="Shift 2 (Malam)">Shift 2 (Malam) • 15:00 - 22:00</option>
@@ -1206,7 +1217,7 @@ export default function ReportsPage() {
                   type="text"
                   value={conductorName}
                   onChange={(e) => setConductorName(e.target.value)}
-                  className="w-full font-bold p-2 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900"
+                  className="w-full font-bold p-2 bg-white border border-slate-300 rounded-xl text-slate-900"
                 />
               </div>
 
@@ -1216,8 +1227,8 @@ export default function ReportsPage() {
                   type="text"
                   value={stockTakeNotes}
                   onChange={(e) => setStockTakeNotes(e.target.value)}
-                  placeholder="Contoh: Kalibrasi grinder 3 shot tumpah..."
-                  className="w-full p-2 bg-white border border-slate-300 rounded-xl focus:outline-none text-slate-800"
+                  placeholder="Contoh: Kalibrasi grinder 3 shot..."
+                  className="w-full p-2 bg-white border border-slate-300 rounded-xl text-slate-800"
                 />
               </div>
             </div>
@@ -1254,9 +1265,7 @@ export default function ReportsPage() {
 
                     return (
                       <tr key={mat.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-bold text-slate-900">
-                          {mat.name}
-                        </td>
+                        <td className="p-3 font-bold text-slate-900">{mat.name}</td>
                         <td className="p-3">
                           <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold text-[10px]">
                             {mat.category}
@@ -1265,9 +1274,7 @@ export default function ReportsPage() {
                         <td className="p-3 text-right font-mono text-slate-600 font-semibold">
                           Rp {mat.unitCost.toLocaleString('id-ID')}/{mat.unit}
                         </td>
-                        <td className="p-3 text-center font-mono text-slate-600">
-                          {mat.startStock} {mat.unit}
-                        </td>
+                        <td className="p-3 text-center font-mono text-slate-600">{mat.startStock} {mat.unit}</td>
                         <td className="p-3 text-center font-mono text-emerald-600 font-bold">
                           {mat.stockIn > 0 ? `+${mat.stockIn}` : '0'} {mat.unit}
                         </td>
@@ -1278,7 +1285,6 @@ export default function ReportsPage() {
                           {sisaSistem} {mat.unit}
                         </td>
                         
-                        {/* Kolom Input Hitung Fisik */}
                         <td className="p-2.5 text-center bg-indigo-50/30">
                           <div className="flex items-center justify-center gap-1">
                             <input
@@ -1292,11 +1298,10 @@ export default function ReportsPage() {
                               }}
                               className="w-24 text-center font-mono font-black text-xs p-1.5 bg-white border-2 border-indigo-400 rounded-xl focus:border-indigo-600 focus:outline-none text-slate-900"
                             />
-                            <span className="text-[10px] text-slate-500 font-bold">{mat.unit}</span>
+                            <span className="text-[10px] font-bold text-slate-500">{mat.unit}</span>
                           </div>
                         </td>
 
-                        {/* Selisih Qty */}
                         <td className="p-3 text-center font-mono font-bold">
                           {isAccurate ? (
                             <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">0</span>
@@ -1307,7 +1312,6 @@ export default function ReportsPage() {
                           )}
                         </td>
 
-                        {/* Nilai Selisih Rupiah */}
                         <td className="p-3 text-right font-mono font-black">
                           {isAccurate ? (
                             <span className="text-emerald-700">Rp 0</span>
@@ -1318,7 +1322,6 @@ export default function ReportsPage() {
                           )}
                         </td>
 
-                        {/* Status Badge */}
                         <td className="p-3 text-center font-bold">
                           {isAccurate ? (
                             <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full inline-flex items-center gap-1">
@@ -1342,7 +1345,6 @@ export default function ReportsPage() {
               </table>
             </div>
 
-            {/* Total Wastage Summary Footer */}
             <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3">
               <div className="text-xs text-slate-500 font-semibold flex items-center gap-2">
                 <ShieldAlert size={16} className="text-amber-600" />
@@ -1369,57 +1371,6 @@ export default function ReportsPage() {
 
           </div>
 
-          {/* RIWAYAT AUDIT STOCK TAKING */}
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
-              <div>
-                <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
-                  <FileText size={18} className="text-indigo-600" />
-                  Riwayat Audit Stock Taking (Opname Log)
-                </h3>
-                <p className="text-xs text-slate-500">Log audit pemeriksaan fisik per shift dan total selisihnya</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {stockTakeLogs.map((log) => (
-                <div key={log.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-center pb-2 mb-2 border-b border-slate-200/60 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-slate-900 text-sm">{log.shiftName}</span>
-                      <span className="bg-slate-200 text-slate-800 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                        {new Date(log.date).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })} WIB
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span className="text-slate-500">Pemeriksa: <strong>{log.conductedBy}</strong></span>
-                      <span className={`font-mono font-black text-xs px-2.5 py-1 rounded-xl ${
-                        log.totalDeficitCost > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
-                      }`}>
-                        {log.totalDeficitCost > 0 ? `Wastage: -Rp ${log.totalDeficitCost.toLocaleString('id-ID')}` : '🟢 100% Akurat (Rp 0)'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Summary of items in log */}
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {log.entries.map((entry, idx) => (
-                      <span key={idx} className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
-                        entry.varianceQty === 0 ? 'bg-white text-slate-600 border-slate-200' :
-                        entry.varianceQty < 0 ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold' :
-                        'bg-blue-50 text-blue-700 border-blue-200 font-bold'
-                      }`}>
-                        {entry.materialName}: {entry.actualCountedStock} {entry.unit} ({entry.varianceQty === 0 ? 'Cocok' : `${entry.varianceQty} ${entry.unit}`})
-                      </span>
-                    ))}
-                  </div>
-                  {log.notes && <p className="text-[10px] text-slate-500 italic mt-2">"{log.notes}"</p>}
-                </div>
-              ))}
-            </div>
-          </div>
-
         </div>
       )}
 
@@ -1429,10 +1380,8 @@ export default function ReportsPage() {
       {activeTab === 'pnl' && (
         <div className="space-y-6 animate-fade-in">
           
-          {/* PNL HEADLINE KPI CARDS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
-            {/* Omset Penjualan */}
             <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pendapatan Bersih</span>
               <div className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight mt-1">
@@ -1443,7 +1392,6 @@ export default function ReportsPage() {
               </p>
             </div>
 
-            {/* Total HPP Aktual */}
             <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
               <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Total HPP Aktual (COGS)</span>
               <div className="text-2xl lg:text-3xl font-black text-amber-600 tracking-tight mt-1">
@@ -1454,7 +1402,6 @@ export default function ReportsPage() {
               </p>
             </div>
 
-            {/* Laba Kotor (Gross Profit) */}
             <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
               <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Laba Kotor (Gross Profit)</span>
               <div className="text-2xl lg:text-3xl font-black text-indigo-700 tracking-tight mt-1">
@@ -1465,7 +1412,6 @@ export default function ReportsPage() {
               </p>
             </div>
 
-            {/* Laba Bersih Usaha (Net Profit) */}
             <div className="bg-emerald-50 rounded-3xl p-5 border border-emerald-200 shadow-xs">
               <span className="text-xs font-black text-emerald-800 uppercase tracking-wider">Laba Bersih Estimasi (EBIT)</span>
               <div className="text-2xl lg:text-3xl font-black text-emerald-900 tracking-tight mt-1">
@@ -1478,7 +1424,7 @@ export default function ReportsPage() {
 
           </div>
 
-          {/* P&L WATERFALL BREAKDOWN BAR CHART */}
+          {/* P&L WATERFALL CHART */}
           <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
               <div>
@@ -1515,7 +1461,7 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* FORMAL ACCOUNTING P&L STATEMENT TABLE */}
+          {/* FORMAL P&L STATEMENT TABLE */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between pb-4 mb-6 border-b-2 border-slate-900">
               <div>
@@ -1533,7 +1479,6 @@ export default function ReportsPage() {
 
             <div className="space-y-4 text-xs font-medium text-slate-800">
               
-              {/* 1. PENDAPATAN */}
               <div>
                 <div className="font-black text-slate-900 text-sm mb-2 flex items-center justify-between bg-slate-100 p-2.5 rounded-xl">
                   <span>1. PENDAPATAN PENJUALAN (REVENUE)</span>
@@ -1555,7 +1500,6 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* 2. HPP (HARGA POKOK PENJUALAN) */}
               <div className="pt-2">
                 <div className="font-black text-slate-900 text-sm mb-2 flex items-center justify-between bg-slate-100 p-2.5 rounded-xl">
                   <span>2. HARGA POKOK PENJUALAN (COGS / BAHAN BAKU)</span>
@@ -1577,7 +1521,6 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* 3. LABA KOTOR */}
               <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-2xl flex justify-between items-center text-sm font-black text-indigo-950">
                 <span>LABA KOTOR USAHA (GROSS PROFIT)</span>
                 <div className="text-right">
@@ -1586,7 +1529,6 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* 4. BEBAN OPERASIONAL (OPEX) */}
               <div className="pt-2">
                 <div className="font-black text-slate-900 text-sm mb-2 flex items-center justify-between bg-slate-100 p-2.5 rounded-xl">
                   <span>3. BEBAN OPERASIONAL HARIAN (OPEX)</span>
@@ -1612,7 +1554,6 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* 5. LABA BERSIH (NET PROFIT / EBIT) */}
               <div className="p-4 bg-emerald-600 text-white rounded-3xl flex justify-between items-center shadow-lg shadow-emerald-600/20">
                 <div>
                   <span className="text-xs font-black uppercase tracking-wider text-emerald-200 block">HASIL AKHIR</span>
