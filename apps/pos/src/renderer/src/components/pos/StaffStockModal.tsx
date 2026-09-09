@@ -551,13 +551,15 @@ export default function StaffStockModal({ isOpen, onClose, initialTab = 'request
                             <button
                               type="button"
                               onClick={() => {
-                                fulfillStockRequest(req.id, user?.name || 'Staff');
-                                showToast('🎉 Barang berhasil diterima & stok langsung bertambah!');
+                                handleSelectDO(req.id);
+                                setActiveTab('stock-in');
                               }}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1 cursor-pointer"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1.5 cursor-pointer text-xs"
+                              title="Buka form verifikasi untuk menginput kuantitas fisik yang tiba di outlet"
                             >
-                              <Check size={14} />
-                              <span>Konfirmasi Barang Sampai</span>
+                              <Truck size={14} />
+                              <span>📥 Input Stok Fisik Datang</span>
+                              <ChevronRight size={13} />
                             </button>
                           )}
                         </div>
