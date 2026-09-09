@@ -119,7 +119,13 @@ interface InventoryState {
     items: { materialId: string; qtyRequested: number }[];
   }) => StockRequest;
 
-  updateStockRequestStatus: (requestId: string, status: StockRequestStatus, reviewedBy?: string, doNumber?: string) => void;
+  updateStockRequestStatus: (
+    requestId: string, 
+    status: StockRequestStatus, 
+    reviewedBy?: string, 
+    doNumber?: string,
+    modifiedItems?: { materialId: string; qtyRequested: number }[]
+  ) => void;
   fulfillStockRequest: (requestId: string, receivedBy: string, customItems?: { materialId: string; qty: number }[], customInvoiceNo?: string) => void;
 
   // Actions Daily Stock Taking (Opname)
@@ -246,6 +252,30 @@ export const INITIAL_STOCK_IN_LOGS: StockInLog[] = [
 ];
 
 export const INITIAL_STOCK_REQUESTS: StockRequest[] = [
+  {
+    id: 'req_202',
+    createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+    requestedBy: 'Budi K. (Kasir)',
+    urgency: 'URGENT',
+    notes: '',
+    status: 'PENDING',
+    items: [
+      {
+        materialId: 'mat_1',
+        materialName: 'Biji Kopi House Blend (Espresso)',
+        qtyRequested: 10,
+        unit: 'kg',
+        currentStockEstimate: 3.1,
+      },
+      {
+        materialId: 'mat_4',
+        materialName: 'Sirup Gula Aren Cair Organik',
+        qtyRequested: 5,
+        unit: 'Liter',
+        currentStockEstimate: 2.8,
+      }
+    ]
+  },
   {
     id: 'req_201',
     createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
@@ -473,19 +503,36 @@ export const useInventoryStore = create<InventoryState>()(
         return newRequest;
       },
 
-      updateStockRequestStatus: (requestId, status, reviewedBy, doNumber) => {
-        set((state) => ({
-          stockRequests: state.stockRequests.map((req) =>
-            req.id === requestId
-              ? {
-                  ...req,
-                  status,
-                  doNumber: doNumber || req.doNumber || (status === 'ORDERED' ? `DO-${Date.now().toString().slice(-6)}` : req.doNumber),
-                  reviewedBy: reviewedBy || req.reviewedBy,
-                  reviewedAt: new Date().toISOString(),
-                }
-              : req
-          ),
+      updateStockRequestStatus: (requestId, status, reviewedBy, doNumber, modifiedItems) => {
+        const state = get();
+        set((s) => ({
+          stockRequests: s.stockRequests.map((req) => {
+            if (req.id !== requestId) return req;
+
+            let updatedItems = req.items;
+            if (modifiedItems && modifiedItems.length > 0) {
+              updatedItems = modifiedItems.map((item) => {
+                const mat = state.materials.find((m) => m.id === item.materialId);
+                const currentEst = mat ? Number((mat.startStock + mat.stockIn - mat.usedSystem).toFixed(2)) : 0;
+                return {
+                  materialId: item.materialId,
+                  materialName: mat?.name || 'Bahan',
+                  qtyRequested: item.qtyRequested,
+                  unit: mat?.unit || 'Pcs',
+                  currentStockEstimate: currentEst,
+                };
+              });
+            }
+
+            return {
+              ...req,
+              status,
+              doNumber: doNumber || req.doNumber || (status === 'ORDERED' ? `DO-${Date.now().toString().slice(-6)}` : req.doNumber),
+              reviewedBy: reviewedBy || req.reviewedBy,
+              reviewedAt: new Date().toISOString(),
+              items: updatedItems,
+            };
+          }),
         }));
       },
 
