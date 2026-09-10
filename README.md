@@ -159,10 +159,13 @@ Gunakan tabel ini sebagai panduan saat Anda ingin melanjutkan pengembangan di ma
 | Modal Varian & Modifier Menu | ✅ Selesai | Pilihan cup (Regular/Large), susu (Oat/Fresh), gula, es, notes |
 | Dialog Pembayaran Multi-Metode | ✅ Selesai | Cash (hitung kembalian otomatis), QRIS dinamis, Debit, E-Wallet |
 | Kitchen Display System (`/kitchen`) | ✅ Selesai | 3 Kolom Kanban (Pending, In Progress, Ready), filter stasiun bar |
-| Portal Laporan Owner (`/reports`) | ✅ Selesai | Switcher Harian, Mingguan, Bulanan + Tombol cetak thermal harian |
-| Manajemen Shift Kasir (`/shift`) | ✅ Selesai | Buka shift (kas awal), Tutup shift (rekonsiliasi kas aktual & selisih) |
+| Portal Laporan Owner (`/reports`) | ✅ Selesai | Switcher Harian, Mingguan, Bulanan + Laba Rugi P&L terintegrasi Wastage |
+| Manajemen Shift Kasir (`/shift`) | ✅ Selesai | Buka shift (kas awal), Tutup shift (rekonsiliasi kas aktual & itemized Z-Report) |
 | Kustomisasi & Branding Kafe (`/settings`) | ✅ Selesai | Custom warna tema hex, upload logo, format info Wi-Fi di struk |
-| Driver Thermal Printer ESC/POS | ✅ Selesai | Byte formatting 80mm/58mm, customer receipt, Z-Report, Daily EOD |
+| Modal Manajemen Stok Staf (`StaffStockModal`) | ✅ Selesai | Request stok dinamis, verifikasi fisik DO (3 kolom anti-fraud), opname fisik shift |
+| Master-Detail PO & Approval DO (Owner) | ✅ Selesai | Modifikasi item/qty bahan sebelum disetujui, auto DO generation, delegasi ke staf |
+| Laporan Audit Stok & Selisih (*Read-Only*) | ✅ Selesai | Ringkasan Wastage Cost, Nilai Stok Fisik, Akurasi Bar, riwayat log per shift |
+| Driver Thermal Printer ESC/POS & Diagnostik | ✅ Selesai | Byte formatting 80mm/58mm, modal tes koneksi IP/USB, Z-Report, Daily EOD |
 | Tendangan Laci Kas (*Cash Drawer Kick*) | ✅ Selesai | Perintah ESC/POS `\x1b\x70\x00\x19\xfa` pada Pin 2 |
 | Server KDS LAN WebSocket (Port 8080) | ✅ Selesai | Real-time broadcast tiket baru & bump status dari tablet barista |
 | Offline Outbox Sync Worker | ✅ Selesai | Polling 15 detik, push batch SQLite ke PostgreSQL saat online |
@@ -214,11 +217,25 @@ pnpm db:seed
 
 ---
 
+## 🏷️ Versi & Release History
+
+- **`v0.2.0`** *(10 Sep 2026)*:
+  - **Manajemen Rantai Pasok Bahan Baku**: Form pengajuan stok staf, verifikasi fisik kedatangan surat jalan (DO) anti-fraud, dan lembar hitung fisik opname per shift.
+  - **Master-Detail PO Owner**: Review terfokus per PO dengan kemampuan memodifikasi kuantitas bahan yang disetujui & penerbitan DO otomatis.
+  - **Laporan Audit Stok & Selisih (*Read-Only*)**: Metrik Wastage Cost, Akurasi Stok Bar, Komparasi Fisik vs Sistem, dan riwayat log shift staf.
+  - **Integrasi Laba Rugi (P&L)**: Kerugian selisih bahan (*wastage*) otomatis terkoneksi menambah HPP aktual outlet.
+  - **Diagnostik Hardware**: Modal tes koneksi & status printer thermal (ESC/POS) serta optimasi area sentuh (*touch targets*) tablet POS.
+- **`v0.1.0`** *(Initial MVP Release)*:
+  - Core POS Offline-First (Electron 33 + React 19 + SQLite).
+  - Kitchen Display System (KDS) Real-Time via LAN WebSocket.
+  - Vendor Hub SaaS Dashboard (Next.js 15) & Cloud Backend (Fastify).
+
+---
+
 ## 📚 Dokumentasi Lengkap Terkait
 
 Untuk detail teknis, desain karakter per karakter struk, dan arsitektur database, buka file berikut di repo ini:
 - **[DOKUMEN_MASTER_KOPIPOS.md](./DOKUMEN_MASTER_KOPIPOS.md)**: Dokumen spesifikasi produk resmi, USP, dan alur bisnis.
-- **[task.md](./task.md)** (di artifacts): Checklist sprint terperinci.
 
 ---
 *KopiPOS SaaS — Dirancang untuk kecepatan, keandalan offline, dan kemudahan bisnis kafe.*
