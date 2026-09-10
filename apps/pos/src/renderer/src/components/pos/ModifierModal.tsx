@@ -23,36 +23,37 @@ const MODIFIERS_CONFIG = [
     required: true,
     options: [
       { name: 'Regular', priceAdd: 0 },
-      { name: 'Large (+Rp 5.000)', priceAdd: 5000 },
+      { name: 'Large (+Rp 5.000)', optionClean: 'Large', priceAdd: 5000 },
     ],
   },
   {
     name: 'Suhu',
     required: true,
     options: [
-      { name: 'Iced (Dingin)', priceAdd: 0 },
-      { name: 'Hot (Panas)', priceAdd: 0 },
+      { name: 'Iced (Dingin)', optionClean: 'Iced', priceAdd: 0 },
+      { name: 'Hot (Panas)', optionClean: 'Hot', priceAdd: 0 },
     ],
   },
   {
     name: 'Pilihan Susu',
     required: false,
     options: [
-      { name: 'Fresh Milk', priceAdd: 0 },
-      { name: 'Oat Milk (+Rp 5.000)', priceAdd: 5000 },
-      { name: 'Almond Milk (+Rp 7.000)', priceAdd: 7000 },
+      { name: 'Fresh Milk', optionClean: 'Fresh Milk', priceAdd: 0 },
+      { name: 'Oat Milk (+Rp 5.000)', optionClean: 'Oat Milk', priceAdd: 5000 },
+      { name: 'Almond Milk (+Rp 7.000)', optionClean: 'Almond Milk', priceAdd: 7000 },
     ],
   },
   {
     name: 'Tingkat Gula',
     required: false,
     options: [
-      { name: 'Normal Sugar (100%)', priceAdd: 0 },
-      { name: 'Less Sugar (50%)', priceAdd: 0 },
-      { name: 'No Sugar (0%)', priceAdd: 0 },
+      { name: 'Normal Sugar (100%)', optionClean: 'Normal Sugar', priceAdd: 0 },
+      { name: 'Less Sugar (50%)', optionClean: 'Less Sugar', priceAdd: 0 },
+      { name: 'No Sugar (0%)', optionClean: 'No Sugar', priceAdd: 0 },
     ],
   },
 ];
+
 
 export default function ModifierModal({ product, onClose }: ModifierModalProps) {
   const { addItem } = useCartStore();
@@ -131,15 +132,16 @@ export default function ModifierModal({ product, onClose }: ModifierModalProps) 
 
               <div className="grid grid-cols-2 gap-2">
                 {group.options.map((opt) => {
-                  const isSelected = selections[group.name]?.optionName === opt.name;
+                  const cleanName = (opt as any).optionClean || opt.name;
+                  const isSelected = selections[group.name]?.optionName === cleanName;
                   return (
                     <button
                       key={opt.name}
                       type="button"
-                      onClick={() => handleSelect(group.name, opt.name, opt.priceAdd)}
-                      className={`p-3 rounded-xl text-left border text-xs font-semibold flex items-center justify-between transition-all ${
+                      onClick={() => handleSelect(group.name, cleanName, opt.priceAdd)}
+                      className={`p-3.5 rounded-xl text-left border text-xs font-semibold flex items-center justify-between transition-all active:scale-95 min-h-[46px] ${
                         isSelected
-                          ? 'border-[#e94560] bg-[#e94560]/5 text-[#e94560] shadow-sm'
+                          ? 'border-[#e94560] bg-[#e94560]/5 text-[#e94560] shadow-sm ring-1 ring-[#e94560]/30'
                           : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                       }`}
                     >

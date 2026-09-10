@@ -1,38 +1,50 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-interface User {
+export interface User {
   id: string;
   name: string;
-  role: string;
+  role: 'ADMIN' | 'MANAGER' | 'CASHIER' | 'BARISTA';
 }
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
-  login: (pin: string) => Promise<boolean>;
+  activeShift: { id: string; openedAt: string; openingCash: number } | null;
+  login: (userData: User) => void;
+  setActiveShift: (shift: { id: string; openedAt: string; openingCash: number } | null) => void;
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  isAuthenticated: false,
-  
-  login: async (pin: string) => {
-    try {
-      const result = await window.posAPI.login(pin);
-      if (result.success) {
-        set({ user: result.user, isAuthenticated: true });
-        return true;
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      isAuthenticated: false,
+      activeShift: null,
+      
+      login: (userData: User) => {
+        set({ user: userData, isAuthenticated: true });
+      },
+      
+      setActiveShift: (activeShift) => {
+        set({ activeShift });
+      },
+      
+      logout: async () => {
+        try {
+          if ((window as any).posAPI?.logout) {
+            await (window as any).posAPI.logout();
+          }
+        } catch (e) {
+          console.error(e);
+        }
+        set({ user: null, isAuthenticated: false });
       }
-      return false;
-    } catch (error) {
-      console.error('Login failed', error);
-      return false;
+    }),
+    {
+      name: 'kopipos-auth-session',
     }
-  },
-  
-  logout: async () => {
-    await window.posAPI.logout();
-    set({ user: null, isAuthenticated: false });
-  }
-}));
+  )
+);
+

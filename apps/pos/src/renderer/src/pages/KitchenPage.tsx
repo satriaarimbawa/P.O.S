@@ -102,21 +102,36 @@ export default function KitchenPage() {
     return 'bg-slate-700 text-slate-300';
   };
 
-  const renderTicket = (order: Order) => (
-    <div key={order.id} className={`bg-slate-800 rounded-lg p-4 border-l-4 mb-4 ${
-      order.status === 'pending' ? 'border-red-500' :
-      order.status === 'in_progress' ? 'border-amber-500' : 'border-green-500'
-    }`}>
-      <div className="flex justify-between items-start mb-3">
-        <div>
-          <h3 className="text-xl font-bold text-white">{order.orderNumber}</h3>
-          <p className="text-slate-400 text-sm">{order.table} • {order.server}</p>
+  const renderTicket = (order: Order) => {
+    const isTakeaway = order.table?.toLowerCase().includes('takeaway') || order.table?.toLowerCase().includes('bungkus');
+    const isDelivery = order.table?.toLowerCase().includes('delivery') || order.table?.toLowerCase().includes('gofood') || order.table?.toLowerCase().includes('grab');
+
+    return (
+      <div key={order.id} className={`bg-slate-800 rounded-2xl p-4 border-l-4 mb-4 shadow-lg ${
+        order.status === 'pending' ? 'border-red-500' :
+        order.status === 'in_progress' ? 'border-amber-500' : 'border-green-500'
+      }`}>
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
+                isTakeaway
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : isDelivery
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+              }`}>
+                {isTakeaway ? '🛍️ Take Away' : isDelivery ? '🛵 Delivery' : '🍽️ Dine-In'}
+              </span>
+            </div>
+            <h3 className="text-xl font-black text-white tracking-tight">{order.orderNumber}</h3>
+            <p className="text-slate-300 text-xs font-semibold mt-0.5">{order.table} • Kasir: {order.server}</p>
+          </div>
+          <div className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 ${getTimerColor(order.timestamp)}`}>
+            <Clock size={13} />
+            {formatElapsedTime(order.timestamp)}
+          </div>
         </div>
-        <div className={`px-2 py-1 rounded text-sm font-medium flex items-center gap-1 ${getTimerColor(order.timestamp)}`}>
-          <Clock size={14} />
-          {formatElapsedTime(order.timestamp)}
-        </div>
-      </div>
 
       <div className="space-y-3 mb-4">
         {order.items.map((item, idx) => (
@@ -179,6 +194,7 @@ export default function KitchenPage() {
       </div>
     </div>
   );
+};
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 flex flex-col font-sans">

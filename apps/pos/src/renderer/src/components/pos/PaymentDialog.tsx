@@ -1,25 +1,55 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Banknote, QrCode, Wallet, CreditCard, Printer, CheckCircle2, ArrowRight } from 'lucide-react';
+import { X, Check, Banknote, QrCode, Wallet, CreditCard, Printer, CheckCircle2, ArrowRight, AlertTriangle, WifiOff } from 'lucide-react';
 import { useCartStore } from '../../stores/useCartStore';
+import { useHardwareStore } from '../../stores/useHardwareStore';
+
+export interface PaymentSuccessResult {
+  receiptPrinted: boolean;
+  drawerOpened: boolean;
+  printerOffline: boolean;
+  method: PaymentMethod;
+  total: number;
+}
 
 interface PaymentDialogProps {
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (result: PaymentSuccessResult) => void;
 }
 
 type PaymentMethod = 'CASH' | 'QRIS' | 'EWALLET' | 'DEBIT';
 
 export default function PaymentDialog({ onClose, onSuccess }: PaymentDialogProps) {
-  const { total, subtotal, taxAmount, discountAmount, clearCart, items, orderType, tableNo } = useCartStore();
+  const { 
+    total, 
+    subtotal, 
+    taxAmount, 
+    discountAmount, 
+    clearCart, 
+    items, 
+    orderType, 
+    tableNo,
+    customerName,
+    deliveryPlatform,
+    driverRefNo,
+    isPackagingFeeApplied,
+    packagingFee
+  } = useCartStore();
+  const { printerStatus, isVirtualSimulator } = useHardwareStore();
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [cashGiven, setCashGiven] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [qrisState, setQrisState] = useState<'generating' | 'waiting' | 'paid'>('generating');
-  const [receiptPrinted, setReceiptPrinted] = useState(true);
+  const [receiptPrinted, setReceiptPrinted] = useState(printerStatus.connected || isVirtualSimulator);
 
+  const isHardwareConnected = printerStatus.connected || isVirtualSimulator;
   const cashAmountNum = parseInt(cashGiven.replace(/\D/g, '') || '0', 10);
   const changeAmount = Math.max(0, cashAmountNum - total);
   const isCashSufficient = method !== 'CASH' || cashAmountNum >= total;
+
+  // Update receipt check state if printer status changes
+  useEffect(() => {
+    setReceiptPrinted(printerStatus.connected || isVirtualSimulator);
+  }, [printerStatus.connected, isVirtualSimulator]);
 
   // Simulate QRIS dynamic code generation
   useEffect(() => {
@@ -49,12 +79,19 @@ export default function PaymentDialog({ onClose, onSuccess }: PaymentDialogProps
     if (!isCashSufficient) return;
 
     setLoading(true);
+    let printSuccess = false;
+    let drawerSuccess = false;
+
     try {
       if ((window as any).posAPI) {
         // Create order via IPC
         await (window as any).posAPI.createOrder({
           orderType,
-          tableNo,
+          tableNo: orderType === 'DINE_IN' ? tableNo : null,
+          customerName: customerName || null,
+          deliveryPlatform: orderType === 'DELIVERY' ? deliveryPlatform : null,
+          driverRefNo: orderType === 'DELIVERY' ? driverRefNo : null,
+          packagingFee: isPackagingFeeApplied ? packagingFee : 0,
           subtotal,
           taxAmount,
           discountAmount,
@@ -63,22 +100,51 @@ export default function PaymentDialog({ onClose, onSuccess }: PaymentDialogProps
           items,
         });
 
-        // Print receipt if checked
-        if (receiptPrinted) {
-          await (window as any).posAPI.printReceipt('latest');
+        // Print receipt only if printer is connected/virtual and checked
+        if (receiptPrinted && isHardwareConnected) {
+          try {
+            printSuccess = await (window as any).posAPI.printReceipt('latest', {
+              orderType,
+              tableNo,
+              customerName,
+              deliveryPlatform,
+              driverRefNo,
+              packagingFee: isPackagingFeeApplied ? packagingFee : 0,
+              subtotal,
+              taxAmount,
+              discountAmount,
+              total,
+              paymentMethod: method,
+              items,
+            });
+          } catch (e) {
+            printSuccess = false;
+          }
         }
 
-        // Auto kick cash drawer if cash
-        if (method === 'CASH') {
-          await (window as any).posAPI.openCashDrawer();
+        // Auto kick cash drawer only if cash AND hardware is connected
+        if (method === 'CASH' && isHardwareConnected) {
+          try {
+            drawerSuccess = await (window as any).posAPI.openCashDrawer();
+          } catch (e) {
+            drawerSuccess = false;
+          }
         }
       } else {
-        // Mock delay
-        await new Promise((r) => setTimeout(r, 800));
+        // Browser mode
+        await new Promise((r) => setTimeout(r, 600));
+        printSuccess = receiptPrinted && isHardwareConnected;
+        drawerSuccess = method === 'CASH' && isHardwareConnected;
       }
 
       clearCart();
-      onSuccess();
+      onSuccess({
+        receiptPrinted: printSuccess,
+        drawerOpened: drawerSuccess,
+        printerOffline: !isHardwareConnected,
+        method,
+        total,
+      });
     } catch (err) {
       console.error('Payment process error:', err);
     } finally {
@@ -93,7 +159,21 @@ export default function PaymentDialog({ onClose, onSuccess }: PaymentDialogProps
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Tagihan</span>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                orderType === 'DINE_IN'
+                  ? 'bg-indigo-100 text-indigo-800'
+                  : orderType === 'TAKE_AWAY'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-amber-100 text-amber-800'
+              }`}>
+                {orderType === 'DINE_IN'
+                  ? `🍽️ DINE IN • Meja ${tableNo || '01'}`
+                  : orderType === 'TAKE_AWAY'
+                  ? `🛍️ TAKE AWAY • ${customerName || 'Bawa Pulang'}`
+                  : `🛵 DELIVERY (${deliveryPlatform || 'GoFood'}) • #${driverRefNo || '-'}`}
+              </span>
+            </div>
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">
               Rp {total.toLocaleString('id-ID')}
             </h2>
@@ -142,57 +222,161 @@ export default function PaymentDialog({ onClose, onSuccess }: PaymentDialogProps
             </div>
           </div>
 
-          {/* CASH SECTION */}
+          {/* CASH SECTION WITH TABLET TOUCH NUMPAD */}
           {method === 'CASH' && (
-            <div className="space-y-4 animate-fade-in bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Uang Diterima dari Pelanggan:
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-lg">Rp</span>
-                  <input
-                    type="text"
-                    value={cashGiven ? parseInt(cashGiven, 10).toLocaleString('id-ID') : ''}
-                    onChange={(e) => setCashGiven(e.target.value.replace(/\D/g, ''))}
-                    placeholder={total.toLocaleString('id-ID')}
-                    className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-slate-200 rounded-xl font-mono text-xl font-black text-slate-900 focus:outline-none focus:border-[#e94560]"
-                    autoFocus
-                  />
+            <div className="space-y-3.5 animate-fade-in bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+              
+              {/* Display & Total Comparison */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Uang Diterima dari Pelanggan:
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-base">Rp</span>
+                    <input
+                      type="text"
+                      value={cashGiven ? parseInt(cashGiven, 10).toLocaleString('id-ID') : ''}
+                      onChange={(e) => setCashGiven(e.target.value.replace(/\D/g, ''))}
+                      placeholder={total.toLocaleString('id-ID')}
+                      className="w-full pl-10 pr-3 py-2.5 bg-white border-2 border-slate-200 rounded-xl font-mono text-lg font-black text-slate-900 focus:outline-none focus:border-[#e94560]"
+                      readOnly={false}
+                    />
+                  </div>
+                </div>
+
+                {/* Kembalian Box */}
+                <div className="w-48 bg-white p-2.5 rounded-xl border border-slate-200 flex flex-col justify-center">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Uang Kembalian:</span>
+                  <span className={`text-lg font-black font-mono truncate ${cashAmountNum >= total ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    Rp {changeAmount.toLocaleString('id-ID')}
+                  </span>
                 </div>
               </div>
 
-              {/* Quick Cash Pills */}
-              <div className="flex flex-wrap gap-2">
+              {/* Quick Preset Nominal Chips */}
+              <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
-                  onClick={() => handleQuickCash(total)}
-                  className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold rounded-lg text-slate-700 shadow-sm"
+                  onClick={() => setCashGiven(total.toString())}
+                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-xs font-bold rounded-lg transition-all active:scale-95 shadow-sm"
                 >
-                  Uang Pas (Rp {total.toLocaleString('id-ID')})
+                  💵 Uang Pas
                 </button>
-                {[50000, 100000, 150000, 200000].map((amt) => {
-                  if (amt < total && amt !== 50000) return null;
-                  return (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => handleQuickCash(amt)}
-                      className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold rounded-lg text-slate-700 shadow-sm"
-                    >
-                      Rp {amt.toLocaleString('id-ID')}
-                    </button>
-                  );
-                })}
+                {[50000, 100000, 150000, 200000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setCashGiven(amt.toString())}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold rounded-lg text-slate-700 transition-all active:scale-95 shadow-sm"
+                  >
+                    Rp {amt.toLocaleString('id-ID')}
+                  </button>
+                ))}
               </div>
 
-              {/* Change / Kembalian Calculation */}
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-600">Uang Kembalian:</span>
-                <span className={`text-xl font-black font-mono ${cashAmountNum >= total ? 'text-emerald-600' : 'text-slate-400'}`}>
-                  Rp {changeAmount.toLocaleString('id-ID')}
-                </span>
+              {/* Tablet On-Screen Touch Numpad */}
+              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="grid grid-cols-4 gap-2">
+                  {/* Row 1 */}
+                  {['1', '2', '3'].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setCashGiven((prev) => (prev === '0' ? d : prev + d))}
+                      className="h-12 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 text-lg font-bold rounded-xl border border-slate-200 transition-all flex items-center justify-center active:scale-95 shadow-xs"
+                    >
+                      {d}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setCashGiven((prev) => {
+                      const cur = parseInt(prev || '0', 10);
+                      return (cur + 10000).toString();
+                    })}
+                    className="h-12 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 transition-all flex items-center justify-center active:scale-95"
+                  >
+                    +10.000
+                  </button>
+
+                  {/* Row 2 */}
+                  {['4', '5', '6'].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setCashGiven((prev) => (prev === '0' ? d : prev + d))}
+                      className="h-12 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 text-lg font-bold rounded-xl border border-slate-200 transition-all flex items-center justify-center active:scale-95 shadow-xs"
+                    >
+                      {d}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setCashGiven((prev) => {
+                      const cur = parseInt(prev || '0', 10);
+                      return (cur + 20000).toString();
+                    })}
+                    className="h-12 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 transition-all flex items-center justify-center active:scale-95"
+                  >
+                    +20.000
+                  </button>
+
+                  {/* Row 3 */}
+                  {['7', '8', '9'].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setCashGiven((prev) => (prev === '0' ? d : prev + d))}
+                      className="h-12 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 text-lg font-bold rounded-xl border border-slate-200 transition-all flex items-center justify-center active:scale-95 shadow-xs"
+                    >
+                      {d}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setCashGiven((prev) => {
+                      const cur = parseInt(prev || '0', 10);
+                      return (cur + 50000).toString();
+                    })}
+                    className="h-12 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 transition-all flex items-center justify-center active:scale-95"
+                  >
+                    +50.000
+                  </button>
+
+                  {/* Row 4 */}
+                  <button
+                    type="button"
+                    onClick={() => setCashGiven((prev) => (prev && prev !== '0' ? prev + '000' : ''))}
+                    className="h-12 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-700 text-sm font-bold rounded-xl border border-slate-200 transition-all flex items-center justify-center active:scale-95 font-mono"
+                  >
+                    000
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCashGiven((prev) => (prev === '0' ? '0' : prev + '0'))}
+                    className="h-12 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-800 text-lg font-bold rounded-xl border border-slate-200 transition-all flex items-center justify-center active:scale-95 shadow-xs"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCashGiven((prev) => prev.slice(0, -1))}
+                    className="h-12 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-600 text-base font-bold rounded-xl border border-slate-200 transition-all flex items-center justify-center active:scale-95"
+                    title="Hapus Satu Angka"
+                  >
+                    ⌫
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCashGiven('')}
+                    className="h-12 bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-600 text-xs font-bold rounded-xl border border-red-200 transition-all flex items-center justify-center active:scale-95"
+                  >
+                    RESET
+                  </button>
+                </div>
               </div>
+
             </div>
           )}
 
@@ -242,18 +426,31 @@ export default function PaymentDialog({ onClose, onSuccess }: PaymentDialogProps
             </div>
           )}
 
-          {/* Receipt & Drawer toggle */}
-          <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200">
-            <span className="flex items-center gap-2 font-medium">
-              <Printer className="w-4 h-4 text-slate-400" /> Cetak Struk Otomatis (80mm)
-            </span>
-            <input
-              type="checkbox"
-              checked={receiptPrinted}
-              onChange={(e) => setReceiptPrinted(e.target.checked)}
-              className="w-4 h-4 accent-[#e94560] cursor-pointer"
-            />
-          </div>
+          {/* PRINTER STATUS & RECEIPT TOGGLE */}
+          {!printerStatus.connected ? (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs flex items-start gap-2.5 animate-pulse">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <span className="font-bold text-red-800 block">Printer Thermal Sedang Offline</span>
+                <span className="text-red-700 text-[11px]">
+                  Koneksi ke printer di <code className="font-mono bg-red-100 px-1 rounded">{printerStatus.host}</code> terputus. Struk tidak akan tercetak fisik. Transaksi tetap dapat disimpan ke sistem.
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 px-4 py-3 rounded-xl border border-slate-200">
+              <span className="flex items-center gap-2 font-medium">
+                <Printer className="w-4 h-4 text-emerald-600" /> Cetak Struk Otomatis (80mm)
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">Ready</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={receiptPrinted}
+                onChange={(e) => setReceiptPrinted(e.target.checked)}
+                className="w-4 h-4 accent-[#e94560] cursor-pointer"
+              />
+            </div>
+          )}
 
         </div>
 
