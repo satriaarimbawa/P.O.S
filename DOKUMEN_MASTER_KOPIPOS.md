@@ -124,6 +124,9 @@ Aplikasi POS dapat mengubah tampilan secara dinamis mengikuti branding kafe:
 
 ## 5. Desain Antarmuka & User Flow (UI/UX)
 
+> 📘 **Panduan Lengkap & Spesifikasi Mendalam**:  
+> Lihat dokumen terpisah [**DOKUMEN_DESAIN_UI_UX.md**](./DOKUMEN_DESAIN_UI_UX.md) untuk pedoman lengkap desain sistem, palet warna, tipografi, standar ergonomi sentuh (Fitts's Law 48px), wireframe ASCII interaktif, serta alur anti-human-error rantai pasok dan stock opname.
+
 ### 5.1 Aktivasi Lisensi & Login PIN Staff
 1. **Layar Aktivasi**: Pertama kali aplikasi dipasang, muncul input lisensi berformat `KPOS-XXXX-XXXX-XXXX`. Aplikasi menghubungi server cloud, memverifikasi masa aktif, mengunduh logo & warna kafe, lalu mengunci mesin (*machine fingerprint*).
 2. **Layar Login PIN**: Kasir dan Barista cukup memasukkan **4 digit PIN** pada keypad numerik layar sentuh untuk masuk ke shift mereka.

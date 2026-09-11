@@ -235,7 +235,8 @@ pnpm db:seed
 ## 📚 Dokumentasi Lengkap Terkait
 
 Untuk detail teknis, desain karakter per karakter struk, dan arsitektur database, buka file berikut di repo ini:
-- **[DOKUMEN_MASTER_KOPIPOS.md](./DOKUMEN_MASTER_KOPIPOS.md)**: Dokumen spesifikasi produk resmi, USP, dan alur bisnis.
+- **[DOKUMEN_DESAIN_UI_UX.md](./DOKUMEN_DESAIN_UI_UX.md)**: Panduan resmi desain sistem, ergonomi layar sentuh tablet, wireframe visual, dan alur anti-human-error.
+- **[DOKUMEN_MASTER_KOPIPOS.md](./DOKUMEN_MASTER_KOPIPOS.md)**: Dokumen spesifikasi produk resmi, USP, model bisnis SaaS, dan alur bisnis.
 
 ---
 *KopiPOS SaaS — Dirancang untuk kecepatan, keandalan offline, dan kemudahan bisnis kafe.*
